@@ -112,6 +112,8 @@ export function ChartStack({ months, series, w, h }: { months: Month[]; series: 
   const totals = months.map((_, i) => series.reduce((a, s) => a + Math.max(0, s.values[i]), 0));
   const max = niceMax(Math.max(1, ...totals));
   const gw = iw / months.length, bw = Math.min(36, gw * 0.56);
+  // Label every nth bar, counted from the newest, so labels never overlap.
+  const every = Math.max(1, Math.ceil(46 / gw));
   const els: ReactElement[] = [];
   axis(els, max, w, ih, cur);
   months.forEach((m, i) => {
@@ -124,7 +126,7 @@ export function ChartStack({ months, series, w, h }: { months: Month[]; series: 
       y0 -= hh;
       els.push(<rect key={`s${i}-${j}`} x={cx - bw / 2} y={y0} width={bw} height={Math.max(0, hh - 1)} style={{ fill: s.color }}><title>{`${m.full} · ${s.name}: ${fmt(v, cur)}`}</title></rect>);
     });
-    els.push(<text key={`l${i}`} x={cx} y={h - 6} textAnchor="middle" style={LBL}>{m.label}</text>);
+    if ((months.length - 1 - i) % every === 0) els.push(<text key={`l${i}`} x={cx} y={h - 6} textAnchor="middle" style={LBL}>{m.label}</text>);
   });
   return <svg viewBox={`0 0 ${w} ${h}`} width="100%" style={{ display: 'block' }}>{els}</svg>;
 }

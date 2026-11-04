@@ -52,14 +52,6 @@ const monthOf = (y: number, m: number): Month => ({
   full: `${MO[m - 1]} ${y}`,
 });
 
-/** The last n complete months, oldest first (the current month is excluded). */
-export function monthsBack(n: number, today: string): Month[] {
-  const [y, m] = parts(today);
-  const out: Month[] = [];
-  for (let i = n; i >= 1; i--) out.push(monthOf(...addMonths(y, m, -i)));
-  return out;
-}
-
 /** Date range choices, laid out three per row like the picker shows them. */
 export const RANGE_ROWS = [
   [['yday', 'Yesterday'], ['today', 'Today'], ['tmrw', 'Tomorrow']],

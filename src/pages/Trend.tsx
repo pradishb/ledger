@@ -1,9 +1,9 @@
 import { useState, type ReactNode } from 'react';
 import { useLedger } from '../data/context';
-import { Dot, Header, Seg } from '../components/common';
+import { Dot, Header, RangePicker, Seg, useRange } from '../components/common';
 import { ChartIE, ChartStack, Sized, type Series } from '../components/Charts';
 import { balColor, flows, sumType } from '../lib/ledger';
-import { monthsBack } from '../lib/dates';
+import { buckets, rangeDates, rangeLabel, unitFits, UNIT_NAME, type Unit } from '../lib/dates';
 import { fmt0 } from '../lib/format';
 import { OTHER } from '../lib/types';
 
@@ -13,11 +13,23 @@ interface Row { name: string; color: string; cells: Cell[]; total: string; avg: 
 export function Trend() {
   const { data, idx, today } = useLedger();
   const [mode, setMode] = useState<'ie' | 'cat'>('ie');
-  const [n, setN] = useState<'6' | '12'>('12');
+  const [range, setRange] = useRange('trend', 'l12m');
+  const [unit, setUnit] = useTrendUnit();
   const [hidden, setHidden] = useState<Record<number, boolean>>({});
 
-  const N = Number(n);
-  const months = monthsBack(N, today);
+  // The chosen range, trimmed to where the transactions are (for open-ended ranges like All dates),
+  // split into one column per period.
+  const [rFrom, rTo] = rangeDates(range, today);
+  let first = today, last = today;
+  for (const t of data.txns) { if (t.date < first) first = t.date; if (t.date > last) last = t.date; }
+  let cFrom = rFrom < first ? first : rFrom, cTo = rTo > last ? last : rTo;
+  if (cFrom > cTo) [cFrom, cTo] = [rFrom, rTo];
+  const fits = (u: Unit) => unitFits(cFrom, cTo, u) && buckets(cFrom, cTo, u).list.length <= MAX_COLS;
+  // A period too small for the range (weekly over ten years) steps up to the next one that fits.
+  const shownUnit = PERIODS.find(u => PERIODS.indexOf(u) >= PERIODS.indexOf(unit) && fits(u)) ?? 'year';
+  const months = buckets(cFrom, cTo, shownUnit).list;
+  const N = months.length;
+  const per = UNIT_NOUN[shownUnit];
   const mfl = months.map(m => flows(data.txns, m.from, m.to, idx));
   const T = (a: number[]) => a.reduce((x, y) => x + y, 0);
   const cell = (c: number, color = 'var(--ink)'): Cell => ({ v: Math.abs(c) < 50 ? '–' : fmt0(c, idx.disp), color });
@@ -64,13 +76,16 @@ export function Trend() {
 
   return (
     <>
-      <Header title="Trend over time" subtitle="Monthly, transfers excluded" />
+      <Header title="Trend over time" subtitle={`${UNIT_NAME[shownUnit]}, transfers excluded`} />
       <div className="content">
         <div className="stack">
           <div className="toolbar">
             <Seg value={mode} onChange={setMode} options={[['ie', 'Income vs expenses'], ['cat', 'Spending by category']] as const} />
-            <Seg value={n} onChange={setN} options={[['6', '6 months'], ['12', '12 months']] as const} />
-            <span className="muted" style={{ fontSize: 12 }}>{months[0].full} – {months[months.length - 1].full}</span>
+            <RangePicker value={range} onChange={setRange} />
+            <select className="select" value={shownUnit} onChange={e => setUnit(e.target.value as Unit)} aria-label="One column per">
+              {PERIODS.map(u => <option key={u} value={u} disabled={!fits(u)}>{UNIT_NAME[u]}</option>)}
+            </select>
+            {(cFrom !== rFrom || cTo !== rTo) && <span className="muted" style={{ fontSize: 12 }}>Data: {rangeLabel(cFrom, cTo, today)}</span>}
           </div>
 
           <div className="panel">
@@ -89,13 +104,11 @@ export function Trend() {
               <thead>
                 <tr>
                   <th style={sticky} />
-                  {months.map((m, i) => (
-                    <th key={m.key} className="r" style={{ whiteSpace: 'nowrap' }}>
-                      {m.label}{m.key.endsWith('-01') || i === 0 ? ` '${m.key.slice(2, 4)}` : ''}
-                    </th>
+                  {months.map(m => (
+                    <th key={m.key} className="r" style={{ whiteSpace: 'nowrap' }} title={m.full}>{m.label}</th>
                   ))}
                   <th className="r" style={{ fontWeight: 600, color: 'var(--ink2)', borderLeft: '1px solid var(--line)' }}>Total</th>
-                  <th className="r" style={{ fontWeight: 600, color: 'var(--ink2)' }}>Avg / mo</th>
+                  <th className="r" style={{ fontWeight: 600, color: 'var(--ink2)' }}>Avg / {per}</th>
                 </tr>
               </thead>
               <tbody>
@@ -118,4 +131,23 @@ export function Trend() {
       </div>
     </>
   );
+}
+
+/** Column sizes that make sense for a table (daily would be hundreds of columns). */
+const PERIODS: Unit[] = ['week', 'month', 'quarter', 'year'];
+const UNIT_NOUN: Record<Unit, string> = { day: 'day', week: 'week', month: 'month', quarter: 'quarter', year: 'year' };
+/** Past this many columns the table and chart get unreadable. */
+const MAX_COLS = 120;
+const UNIT_KEY = 'ledger.unit.trend';
+
+/** Trend's period size, remembered per device. Monthly to start. */
+function useTrendUnit() {
+  const [u, setU] = useState<Unit>(() => {
+    try { const v = localStorage.getItem(UNIT_KEY) as Unit; return PERIODS.includes(v) ? v : 'month'; } catch { return 'month'; }
+  });
+  const set = (v: Unit) => {
+    setU(v);
+    try { localStorage.setItem(UNIT_KEY, v); } catch { /* storage unavailable */ }
+  };
+  return [u, set] as const;
 }
