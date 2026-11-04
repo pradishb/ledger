@@ -1,6 +1,6 @@
 import { Link } from 'react-router';
 import { useLedger } from '../data/context';
-import { Header, Seg, UserRow } from '../components/ui';
+import { Header, Seg, UserRow } from '../components/common';
 
 /** Phone-only overflow menu for the pages that don't fit in the tab bar. */
 export function More() {

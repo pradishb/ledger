@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useLedger } from '../data/context';
 import { api, useLedgerMutation } from '../data/api';
-import { Dot, Header, Seg } from '../components/ui';
+import { Dot, Header, Seg } from '../components/common';
 import { rangeDates } from '../lib/dates';
 import { errorMessage, fmt } from '../lib/format';
 import { OTHER, PALETTE, PAYMENTS, type CatType } from '../lib/types';
@@ -144,7 +144,7 @@ export function CategoriesPayees() {
                 <button className="btn sm" onClick={submitPayee} disabled={!online || addPayee.isPending}>Add</button>
               </div>
               <div className="scroll-x">
-                <table className="tbl fixed" style={{ minWidth: 640 }}>
+                <table className="tbl tbl-fixed" style={{ minWidth: 640 }}>
                   <thead>
                     <tr>
                       <th>Payee</th>

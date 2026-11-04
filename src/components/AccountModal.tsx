@@ -1,10 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useLedger } from '../data/context';
 import { api, useLedgerMutation } from '../data/api';
 import { CURRENCY_CODES, DEFAULT_CURRENCY } from '../data/rates';
 import { currencySymbol, errorMessage, parseMoney } from '../lib/format';
 import { ACCOUNT_TYPES, type Account, type AccountType } from '../lib/types';
-import { CurrencySelect } from './ui';
+import { CurrencySelect, SheetDialog } from './common';
 
 /**
  * Add an account (no `account`), or edit one: name, type, group, opening balance and visibility.
@@ -25,12 +25,6 @@ export function AccountModal({ account, onClose }: { account?: Account; onClose:
   const [err, setErr] = useState('');
   const groups = [...new Set(data.accounts.map(a => a.group).filter(Boolean))].sort((x, y) => x.localeCompare(y));
   const busy = update.isPending || add.isPending;
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
 
   async function submit() {
     const n = name.trim();
@@ -53,14 +47,12 @@ export function AccountModal({ account, onClose }: { account?: Account; onClose:
   }
 
   return (
-    <div className="scrim" onMouseDown={onClose}>
-      <form className="sheet" style={{ width: 520 }} onMouseDown={e => e.stopPropagation()} role="dialog" aria-modal="true"
-        onSubmit={e => { e.preventDefault(); submit(); }}>
-        <div className="sheet-head">
-          <div className="t">{isNew ? 'New account' : 'Edit account'}</div>
-          <button type="button" className="x" onClick={onClose} title="Close (Esc)">×</button>
-        </div>
-        <div className="sheet-body">
+    <SheetDialog title={isNew ? 'New account' : 'Edit account'} width={520} onClose={onClose} onSubmit={submit}
+      foot={<>
+        <div className="spacer" />
+        <button type="button" className="btn" onClick={onClose}>Cancel</button>
+        <button className="btn-primary" disabled={busy || !online}>{isNew ? 'Add account' : 'Save'}</button>
+      </>}>
           <div className="form-grid">
             <label className="field full">Name
               <input className="input" value={name} onChange={e => setName(e.target.value)} autoFocus />
@@ -96,13 +88,6 @@ export function AccountModal({ account, onClose }: { account?: Account; onClose:
           </div>
           {err && <div className="err">{err}</div>}
           {!online && <div className="err">You're offline. Changes can't be saved until you reconnect.</div>}
-        </div>
-        <div className="sheet-foot">
-          <div className="spacer" />
-          <button type="button" className="btn" onClick={onClose}>Cancel</button>
-          <button className="btn-primary" disabled={busy || !online}>{isNew ? 'Add account' : 'Save'}</button>
-        </div>
-      </form>
-    </div>
+    </SheetDialog>
   );
 }

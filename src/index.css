@@ -1,0 +1,56 @@
+/* Tailwind + shadcn. The original stylesheet sits in its own layer, below Tailwind's utilities,
+   so its element rules (button, input...) never override a component's utility classes. */
+@layer theme, base, legacy, components, utilities;
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "./styles.css" layer(legacy);
+
+/* The app switches themes with data-theme on <html>, not a .dark class. */
+@custom-variant dark (&:where([data-theme=dark], [data-theme=dark] *));
+
+/* shadcn's token names, pointed at the app's own palette (defined in styles.css). */
+@theme inline {
+  --color-background: var(--bg);
+  --color-foreground: var(--ink);
+  --color-card: var(--panel);
+  --color-card-foreground: var(--ink);
+  --color-popover: var(--panel);
+  --color-popover-foreground: var(--ink);
+  --color-primary: var(--acc);
+  --color-primary-foreground: var(--accInk);
+  --color-secondary: var(--sunk);
+  --color-secondary-foreground: var(--ink);
+  --color-muted: var(--sunk);
+  --color-muted-foreground: var(--ink3);
+  --color-accent: var(--hover);
+  --color-accent-foreground: var(--ink);
+  --color-destructive: var(--neg);
+  --color-border: var(--line);
+  --color-input: var(--line2);
+  --color-ring: var(--acc);
+  --color-selected: var(--sel);
+  --color-inc: var(--inc);
+  --color-out: var(--out);
+  --color-ink2: var(--ink2);
+
+  --font-sans: var(--sans);
+  --font-mono: var(--mono);
+
+  /* The app is dense: 13px body text. */
+  --text-sm: 13px;
+  --text-sm--line-height: 1.4;
+  --text-xs: 11.5px;
+  --text-xs--line-height: 1.4;
+
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 10px;
+}
+
+@layer base {
+  * { @apply border-border outline-ring/50; }
+}
+
+/* Money in tables: monospaced, right-aligned. */
+[data-slot='table-cell'].num { font-family: var(--mono); font-size: 12px; text-align: right; }

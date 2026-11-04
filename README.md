@@ -1,6 +1,8 @@
 # Ledger
 
 Personal finance tracker: React + TypeScript + Vite, Supabase (Postgres + Auth), installable as a PWA.
+UI: [shadcn/ui](https://ui.shadcn.com) (Radix + Tailwind v4) components in `src/components/ui/`, and
+[TanStack Table](https://tanstack.com/table) for the Accounts and Transactions tables (`src/components/data-table.tsx`).
 Ported from the Claude Design file `Finance Tracker.dc.html`.
 
 ## Setup
@@ -18,6 +20,12 @@ Ported from the Claude Design file `Finance Tracker.dc.html`.
    npm run dev
    ```
 5. Sign in, click **Add starter categories**, then add your accounts on the Accounts page.
+
+## Previewing without signing in
+
+With `npm run dev` running, open `/preview.html?page=/accounts` (add `&theme=dark` for dark mode). It renders
+the real app on made-up sample data, without Supabase, so layouts can be checked quickly. It isn't part of the
+production build.
 
 ## Deploy (needed for the phone)
 

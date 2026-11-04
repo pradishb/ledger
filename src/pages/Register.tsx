@@ -1,9 +1,13 @@
 import { useState } from 'react';
+import type { ColumnDef, RowSelectionState } from '@tanstack/react-table';
 import { useSearchParams } from 'react-router';
 import { useLedger } from '../data/context';
 import { api, useLedgerMutation } from '../data/api';
-import { Header } from '../components/ui';
+import { Header } from '../components/common';
 import { AccountModal } from '../components/AccountModal';
+import { DataTable } from '../components/data-table';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { amountFor, balColor, describeTxn, sortTxnsAsc } from '../lib/ledger';
 import { fdate, REG_RANGES, regFrom, type RegRange } from '../lib/dates';
 import { errorMessage, fmt } from '../lib/format';
@@ -25,8 +29,7 @@ export function Register() {
   const [q, setQ] = useState('');
   const [range, setRange] = useState<RegRange>('3m');
   const [editing, setEditing] = useState(false);
-  const [picked, setPicked] = useState<Set<number>>(new Set());
-  const [anchor, setAnchor] = useState(0);
+  const [selection, setSelection] = useState<RowSelectionState>({});
   const upd = useLedgerMutation(api.updateTxns);
   const tagM = useLedgerMutation(api.setTxnTags);
   const delM = useLedgerMutation(api.deleteTxns);
@@ -90,26 +93,39 @@ export function Register() {
   // Size the money columns to their longest value (mono 12px is 7.2px a character), so big
   // amounts never spill into the next column.
   const monoW = (n: number, pad: number, min: number) => Math.max(min, Math.ceil(n * 7.2) + pad);
-  const amtW = monoW(Math.max(0, ...rows.map(r => fmt(r.amt, rowCur(r.t)).length)), 18, 104);
-  const lastW = A ? monoW(Math.max(0, ...rows.map(r => fmt(r.run, acur).length)), 24, 112) : 112;
+  // Padding: 8px left plus up to 14px right (the last column), with a little to spare.
+  const amtW = monoW(Math.max(0, ...rows.map(r => fmt(r.amt, rowCur(r.t)).length)), 30, 104);
+  const lastW = A ? monoW(Math.max(0, ...rows.map(r => fmt(r.run, acur).length)), 30, 112) : 112;
+
+  type Row = (typeof rows)[number] & { v: ReturnType<typeof describeTxn> };
+  const tableRows: Row[] = rows.map(r => ({ ...r, v: describeTxn(r.t, r.amt, A, idx) }));
+  const byDate = (x: Row, y: Row) => (x.t.date < y.t.date ? -1 : x.t.date > y.t.date ? 1 : x.t.id - y.t.id);
+  const text = (x: string, y: string) => x.localeCompare(y, undefined, { sensitivity: 'base' });
+
+  // One account shows its running balance; every account shows which account each row is in.
+  // Rows start newest first; a header click sorts, a third click goes back to that order.
+  const columns: ColumnDef<Row, unknown>[] = [
+    { id: 'date', header: 'Date', size: 90, accessorFn: r => r.t.date, sortingFn: (a, b) => byDate(a.original, b.original),
+      meta: { cellClass: 'text-xs text-ink2' }, cell: ({ row }) => fdate(row.original.t.date, today) },
+    { id: 'payment', header: 'Payment', size: 120, meta: { cellClass: 'text-xs text-muted-foreground' },
+      accessorFn: r => [r.t.pay === 'None' ? '' : r.t.pay, r.t.info ? '#' + r.t.info : ''].filter(Boolean).join(' ') },
+    { id: 'payee', header: 'Payee', accessorFn: r => r.v.payee, meta: { flex: true }, sortingFn: (a, b) => text(a.original.v.payee, b.original.v.payee) },
+    { id: 'category', header: 'Category', accessorFn: r => r.v.category, sortingFn: (a, b) => text(a.original.v.category, b.original.v.category),
+      meta: { flex: true, cellClass: 'text-xs', cellStyle: r => ({ color: r.v.catColor }) } },
+    { id: 'memo', header: 'Memo', accessorFn: r => r.t.memo, meta: { flex: true, cellClass: 'text-xs text-ink2' } },
+    ...(A ? [] : [{ id: 'account', header: 'Account', size: 120, accessorFn: (r: Row) => idx.accMap.get(r.t.acc)?.name ?? '',
+      meta: { cellClass: 'text-xs text-muted-foreground' } } satisfies ColumnDef<Row, unknown>]),
+    { id: 'tags', header: 'Tags', size: 110, accessorFn: r => tagText(r.t), enableSorting: false, meta: { cellClass: 'text-xs text-muted-foreground' } },
+    { id: 'amount', header: 'Amount', size: amtW, sortDescFirst: true, accessorFn: r => (A ? r.amt : idx.toDisp(r.t.acc, r.amt)),
+      meta: { align: 'right', cellClass: 'num', cellStyle: r => ({ color: r.v.amtColor }) }, cell: ({ row }) => fmt(row.original.amt, rowCur(row.original.t)) },
+    ...(A ? [{ id: 'balance', header: 'Balance', size: lastW, enableSorting: false,
+      meta: { align: 'right' as const, cellClass: 'num', cellStyle: (r: Row) => ({ color: balColor(r.run) }) },
+      cell: ({ row }: { row: { original: Row } }) => fmt(row.original.run, acur) } satisfies ColumnDef<Row, unknown>] : []),
+  ];
 
   // Selection. Only rows on screen count, so a search or range change never edits hidden rows.
-  const sel = rows.filter(r => picked.has(r.t.id)).map(r => r.t);
-  const allPicked = rows.length > 0 && sel.length === rows.length;
-  const clearPick = () => { setPicked(new Set()); setAnchor(0); };
-  function pick(id: number, shift: boolean) {
-    setPicked(prev => {
-      const next = new Set(prev);
-      const on = !prev.has(id);
-      // Shift-click sets every row between the last clicked one and this one.
-      const a = rows.findIndex(r => r.t.id === anchor), b = rows.findIndex(r => r.t.id === id);
-      if (shift && a >= 0 && b >= 0) {
-        for (let i = Math.min(a, b); i <= Math.max(a, b); i++) on ? next.add(rows[i].t.id) : next.delete(rows[i].t.id);
-      } else if (on) next.add(id); else next.delete(id);
-      return next;
-    });
-    setAnchor(id);
-  }
+  const sel = rows.filter(r => selection[r.t.id]).map(r => r.t);
+  const clearPick = () => setSelection({});
 
   // Category and payee don't apply to transfers, and a split's categories live on its lines.
   const plain = sel.filter(t => !t.xfer && !t.splits);
@@ -155,54 +171,54 @@ export function Register() {
     ...idx.subsOf(c.id).map(s => <option key={s.id} value={s.id}>{'\u00a0\u00a0\u00a0\u00a0' + s.name}</option>),
   ]);
 
+  const filters = <>
+    <Input type="search" className="h-8 w-60" value={q} onChange={e => setQ(e.target.value)} placeholder="Search payee, memo, category, amount" aria-label="Search" />
+    <select className="select" value={range} onChange={e => setRange(e.target.value as RegRange)} aria-label="Date range">
+      {REG_RANGES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+    </select>
+    <select className="select" value={A > 0 ? A : ''} onChange={e => setParam('account', e.target.value)} aria-label="Account">
+      <option value="">All accounts</option>
+      {shownAccounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+      {hiddenAccounts.length > 0 && <optgroup label="Hidden">{hiddenAccounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</optgroup>}
+    </select>
+    <select className="select" value={K} onChange={e => setParam('kind', e.target.value)} aria-label="Type">
+      <option value="">All types</option>
+      <option value="exp">Expenses</option>
+      <option value="inc">Income</option>
+      <option value="xfer">Transfers</option>
+    </select>
+    <select className="select" value={C || ''} onChange={e => setParam('category', e.target.value)} aria-label="Category">
+      <option value="">All categories</option>
+      <optgroup label="Expense">{catOpts('exp')}</optgroup>
+      <optgroup label="Income">{catOpts('inc')}</optgroup>
+    </select>
+    <select className="select" value={P >= 0 ? P : ''} onChange={e => setParam('payee', e.target.value)} aria-label="Payee">
+      <option value="">All payees</option>
+      <option value="0">— No payee —</option>
+      {[...data.payees].sort((x, y) => x.name.localeCompare(y.name)).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+    </select>
+    {anyFilter && (
+      <Button variant="link" size="sm" className="h-auto px-0" onClick={() => { setQ(''); setParams(new URLSearchParams(), { replace: true }); }}>Clear filters</Button>
+    )}
+  </>;
+  const balanceNote = b !== undefined && (
+    <span className="flex items-baseline gap-1.5 text-xs text-muted-foreground">
+      Balance<span className="font-mono text-[12.5px] font-medium" style={{ color: balColor(b) }}>{fmt(b, acur)}</span>
+    </span>
+  );
+
   return (
     <>
       <Header title={title} subtitle={subtitle}>
-        {acct && <button type="button" className="btn sm" onClick={() => setEditing(true)}>Edit account</button>}
+        {acct && <Button variant="outline" size="sm" onClick={() => setEditing(true)}>Edit account</Button>}
       </Header>
       {acct && editing && <AccountModal account={acct} onClose={() => setEditing(false)} />}
       <div className="content">
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <div className="toolbar">
-            <input className="input" style={{ width: 240 }} value={q} onChange={e => setQ(e.target.value)} placeholder="Search payee, memo, category, amount" type="search" />
-            <select className="select" value={range} onChange={e => setRange(e.target.value as RegRange)} aria-label="Date range">
-              {REG_RANGES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
-            </select>
-            <select className="select" value={A > 0 ? A : ''} onChange={e => setParam('account', e.target.value)} aria-label="Account">
-              <option value="">All accounts</option>
-              {shownAccounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-              {hiddenAccounts.length > 0 && <optgroup label="Hidden">{hiddenAccounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</optgroup>}
-            </select>
-            <select className="select" value={K} onChange={e => setParam('kind', e.target.value)} aria-label="Type">
-              <option value="">All types</option>
-              <option value="exp">Expenses</option>
-              <option value="inc">Income</option>
-              <option value="xfer">Transfers</option>
-            </select>
-            <select className="select" value={C || ''} onChange={e => setParam('category', e.target.value)} aria-label="Category">
-              <option value="">All categories</option>
-              <optgroup label="Expense">{catOpts('exp')}</optgroup>
-              <optgroup label="Income">{catOpts('inc')}</optgroup>
-            </select>
-            <select className="select" value={P >= 0 ? P : ''} onChange={e => setParam('payee', e.target.value)} aria-label="Payee">
-              <option value="">All payees</option>
-              <option value="0">— No payee —</option>
-              {[...data.payees].sort((x, y) => x.name.localeCompare(y.name)).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
-            {anyFilter && (
-              <button type="button" className="link" onClick={() => { setQ(''); setParams(new URLSearchParams(), { replace: true }); }}>Clear filters</button>
-            )}
-            <div className="spacer" />
-            {b !== undefined && (
-              <span style={{ display: 'flex', gap: 6, alignItems: 'baseline', fontSize: 11.5, color: 'var(--ink3)' }}>
-                Balance<span className="mono" style={{ fontSize: 12.5, color: balColor(b), fontWeight: 500 }}>{fmt(b, acur)}</span>
-              </span>
-            )}
-          </div>
-
+          {isMobile && <div className="toolbar">{filters}{balanceNote}</div>}
           <div className="panel">
             {sel.length > 0 && (
-              <div className="bulk-bar" role="toolbar" aria-label="Bulk edit">
+              <div className="flex flex-wrap items-center gap-2 border-b bg-primary/10 px-3.5 py-2 text-[12.5px]" role="toolbar" aria-label="Bulk edit">
                 <b>{sel.length} selected</b>
                 <select className="select" value="" disabled={!online || busy} aria-label="Set category" onChange={e => e.target.value && setCategory(+e.target.value)}>
                   <option value="">Category…</option>
@@ -218,11 +234,11 @@ export function Register() {
                   <option value="">Payment…</option>
                   {PAYMENTS.map(p => <option key={p} value={p}>{p}</option>)}
                 </select>
-                <button type="button" className="btn sm" disabled={!online || busy} onClick={() => changeTags(true)}>Add tag…</button>
-                <button type="button" className="btn sm" disabled={!online || busy} onClick={() => changeTags(false)}>Remove tag…</button>
-                <button type="button" className="btn sm danger" disabled={!online || busy} onClick={remove}>Delete</button>
-                <span className="spacer" />
-                <button type="button" className="link" onClick={clearPick}>Clear selection</button>
+                <Button variant="outline" size="sm" disabled={!online || busy} onClick={() => changeTags(true)}>Add tag…</Button>
+                <Button variant="outline" size="sm" disabled={!online || busy} onClick={() => changeTags(false)}>Remove tag…</Button>
+                <Button variant="outline" size="sm" className="text-destructive hover:text-destructive" disabled={!online || busy} onClick={remove}>Delete</Button>
+                <span className="flex-1" />
+                <Button variant="link" size="sm" className="h-auto px-0" onClick={clearPick}>Clear selection</Button>
               </div>
             )}
             {isMobile ? (
@@ -244,50 +260,11 @@ export function Register() {
                 })}
               </div>
             ) : (
-              <div className="scroll-x">
-                <table className="tbl fixed" style={{ minWidth: 798 + amtW + lastW }}>
-                  <thead>
-                    <tr>
-                      <th className="pick">
-                        <input type="checkbox" checked={allPicked} disabled={!rows.length}
-                          ref={el => { if (el) el.indeterminate = sel.length > 0 && !allPicked; }}
-                          onChange={() => (allPicked ? clearPick() : setPicked(new Set(rows.map(r => r.t.id))))}
-                          aria-label={allPicked ? 'Select none' : 'Select all shown'} />
-                      </th>
-                      <th style={{ width: 90 }}>Date</th>
-                      <th style={{ width: 120 }}>Payment</th>
-                      <th>Payee</th>
-                      <th>Category</th>
-                      <th>Memo</th>
-                      <th style={{ width: 110 }}>{A ? 'Tags' : 'Account'}</th>
-                      <th className="r" style={{ width: amtW }}>Amount</th>
-                      <th className="r" style={{ width: lastW }}>{A ? 'Balance' : 'Tags'}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {rows.map(({ t, amt, run }) => {
-                      const v = describeTxn(t, amt, A, idx);
-                      const payment = [t.pay === 'None' ? '' : t.pay, t.info ? '#' + t.info : ''].filter(Boolean).join(' ');
-                      return (
-                        <tr key={t.id} className={`reg-row clickable${picked.has(t.id) ? ' picked' : ''}`} style={{ opacity: t.date > today ? 0.55 : 1 }}
-                          onClick={() => openEdit(t)} title="Click to edit">
-                          <td className="pick" onClick={e => { e.stopPropagation(); pick(t.id, e.shiftKey); }}>
-                            <input type="checkbox" checked={picked.has(t.id)} readOnly tabIndex={-1} aria-label="Select" />
-                          </td>
-                          <td className="small" style={{ color: 'var(--ink2)', whiteSpace: 'nowrap' }}>{fdate(t.date, today)}</td>
-                          <td className="small muted ell">{payment}</td>
-                          <td className="ell">{v.payee}</td>
-                          <td className="small ell" style={{ color: v.catColor }}>{v.category}</td>
-                          <td className="small ell" style={{ color: 'var(--ink2)' }}>{t.memo}</td>
-                          <td className="small muted ell">{A ? tagText(t) : idx.accMap.get(t.acc)?.name}</td>
-                          <td className="num" style={{ color: v.amtColor }}>{fmt(amt, rowCur(t))}</td>
-                          <td className="num" style={{ color: A ? balColor(run) : 'var(--ink3)' }}>{A ? fmt(run, acur) : tagText(t)}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+              <DataTable id="transactions" data={tableRows} columns={columns} getRowId={r => String(r.t.id)}
+                selection={selection} onSelectionChange={setSelection}
+                onRowClick={r => openEdit(r.t)} rowTitle="Click to edit"
+                rowClassName={r => (r.t.date > today ? 'opacity-55' : '')}
+                toolbar={filters} toolbarEnd={balanceNote} />
             )}
             {!rows.length && <div className="empty">No transactions match these filters.</div>}
             <div className="foot">

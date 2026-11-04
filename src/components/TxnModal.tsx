@@ -1,11 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useLedger } from '../data/context';
 import { api, useLedgerMutation, type TxnPayload } from '../data/api';
 import { centsOr0, centsToInput, currencySymbol, errorMessage, fmt, parseMoney } from '../lib/format';
 import { PAYMENTS } from '../lib/types';
 import type { Account, CatType, Txn } from '../lib/types';
 import type { Index } from '../lib/ledger';
-import { Seg } from './ui';
+import { Seg, SheetDialog } from './common';
 
 type TxnType = CatType | 'xfer';
 interface Line { cat: string; memo: string; amount: string }
@@ -121,12 +121,6 @@ export function TxnModal({ initial, onClose }: { initial: Draft; onClose: () => 
   const delM = useLedgerMutation(api.deleteTxn);
   const busy = saveM.isPending || delM.isPending;
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
-
   const setD = (patch: Partial<Draft>) => { setDraft(x => ({ ...x, ...patch })); setErr(''); };
   const isX = d.type === 'xfer';
   const split = !isX && d.split;
@@ -179,17 +173,17 @@ export function TxnModal({ initial, onClose }: { initial: Draft; onClose: () => 
   }
 
   return (
-    <div className="scrim" onMouseDown={onClose}>
-      <div className="sheet" onMouseDown={e => e.stopPropagation()} role="dialog" aria-modal="true">
-        <div className="sheet-head">
-          <div className="t">{d.id ? 'Edit transaction' : 'New transaction'}</div>
-          <Seg className="md" value={d.type}
-            options={[['exp', 'Expense'], ['inc', 'Income'], ['xfer', 'Transfer']] as const}
-            onChange={k => setD({ type: k, cat: '0', xfer: d.xfer === d.acc ? otherAccount(accounts, d.acc) : d.xfer })} />
-          <button className="x" onClick={onClose} title="Close (Esc)">×</button>
-        </div>
-
-        <div className="sheet-body">
+    <SheetDialog title={d.id ? 'Edit transaction' : 'New transaction'} onClose={onClose}
+      head={<Seg className="md" value={d.type}
+        options={[['exp', 'Expense'], ['inc', 'Income'], ['xfer', 'Transfer']] as const}
+        onChange={k => setD({ type: k, cat: '0', xfer: d.xfer === d.acc ? otherAccount(accounts, d.acc) : d.xfer })} />}
+      foot={<>
+        {d.id > 0 && <button className="btn danger" onClick={del} disabled={busy || !online}>Delete</button>}
+        <div className="spacer" />
+        <button className="btn" onClick={onClose}>Cancel</button>
+        {!d.id && <button className="btn" onClick={() => save(true)} disabled={busy || !online}>Save and add another</button>}
+        <button className="btn-primary" onClick={() => save(false)} disabled={busy || !online}>Save</button>
+      </>}>
           <div className="form-grid">
             <label className="field">Date
               <input className="input" type="date" value={d.date} onChange={e => setD({ date: e.target.value })} />
@@ -288,17 +282,7 @@ export function TxnModal({ initial, onClose }: { initial: Draft; onClose: () => 
           </div>
           {err && <div className="err">{err}</div>}
           {!online && <div className="err">You're offline. Changes can't be saved until you reconnect.</div>}
-        </div>
-
-        <div className="sheet-foot">
-          {d.id > 0 && <button className="btn danger" onClick={del} disabled={busy || !online}>Delete</button>}
-          <div className="spacer" />
-          <button className="btn" onClick={onClose}>Cancel</button>
-          {!d.id && <button className="btn" onClick={() => save(true)} disabled={busy || !online}>Save and add another</button>}
-          <button className="btn-primary" onClick={() => save(false)} disabled={busy || !online}>Save</button>
-        </div>
-      </div>
-    </div>
+    </SheetDialog>
   );
 }
 

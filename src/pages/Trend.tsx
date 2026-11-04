@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import { useLedger } from '../data/context';
-import { Dot, Header, Seg } from '../components/ui';
+import { Dot, Header, Seg } from '../components/common';
 import { ChartIE, ChartStack, Sized, type Series } from '../components/Charts';
 import { balColor, flows, sumType } from '../lib/ledger';
 import { monthsBack } from '../lib/dates';

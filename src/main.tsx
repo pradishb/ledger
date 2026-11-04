@@ -1,25 +1,18 @@
 import { StrictMode, useCallback } from 'react';
 import { createRoot } from 'react-dom/client';
-import { BrowserRouter, Navigate, Route, Routes, useParams } from 'react-router';
+import { BrowserRouter } from 'react-router';
 import { QueryClient } from '@tanstack/react-query';
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
 import { createAsyncStoragePersister } from '@tanstack/query-async-storage-persister';
 import { del, get, set } from 'idb-keyval';
 import '@fontsource-variable/geist';
 import '@fontsource-variable/geist-mono';
-import './styles.css';
+import './index.css';
 
 import { supabase } from './data/supabase';
 import { applyTheme, forgetSession, hadSession, initialTheme, useOnline, useSession } from './data/hooks';
-import { Layout } from './components/Layout';
 import { Login } from './components/Login';
-import { Overview } from './pages/Overview';
-import { Accounts } from './pages/Accounts';
-import { Register } from './pages/Register';
-import { Stats } from './pages/Stats';
-import { Trend } from './pages/Trend';
-import { CategoriesPayees } from './pages/CategoriesPayees';
-import { More } from './pages/More';
+import { AppRoutes } from './routes';
 
 const MONTH = 1000 * 60 * 60 * 24 * 30;
 const CACHE_KEY = 'ledger.cache';
@@ -38,12 +31,6 @@ const persister = createAsyncStoragePersister({
 
 applyTheme(initialTheme());
 
-/** Old /accounts/:id links now open the Transactions page filtered to that account. */
-function AccountRedirect() {
-  const { id } = useParams();
-  return <Navigate to={`/transactions?account=${id}`} replace />;
-}
-
 function App() {
   const { session, loading } = useSession();
   const online = useOnline();
@@ -59,21 +46,7 @@ function App() {
   // Offline, an expired token can't be refreshed; still show the cached data.
   if (!session && !(!online && hadSession())) return <Login />;
 
-  return (
-    <Routes>
-      <Route element={<Layout onSignOut={signOut} email={session?.user.email ?? ''} />}>
-        <Route index element={<Overview />} />
-        <Route path="accounts" element={<Accounts />} />
-        <Route path="accounts/:id" element={<AccountRedirect />} />
-        <Route path="transactions" element={<Register />} />
-        <Route path="stats" element={<Stats />} />
-        <Route path="trend" element={<Trend />} />
-        <Route path="categories" element={<CategoriesPayees />} />
-        <Route path="more" element={<More />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Route>
-    </Routes>
-  );
+  return <AppRoutes onSignOut={signOut} email={session?.user.email ?? ''} />;
 }
 
 createRoot(document.getElementById('root')!).render(

@@ -1,7 +1,15 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { ToggleGroup as ToggleGroupPrimitive } from 'radix-ui';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Dialog, DialogClose, DialogContent, DialogTitle } from '@/components/ui/dialog';
+import { cn } from '@/lib/utils';
+import { useState, type ReactNode } from 'react';
 import { isRange, RANGE_ROWS, rangeDates, rangeLabel, rangeName, type Range } from '../lib/dates';
 import { useLedger } from '../data/context';
 
+/**
+ * A segmented switch (one of a few options). Radix ToggleGroup gives it arrow-key navigation and
+ * proper radio semantics; the look stays the app's .seg style.
+ */
 export function Seg<K extends string>({ options, value, onChange, className = '' }: {
   options: readonly (readonly [K, string])[];
   value: K;
@@ -9,13 +17,15 @@ export function Seg<K extends string>({ options, value, onChange, className = ''
   className?: string;
 }) {
   return (
-    <div className={`seg ${className}`}>
+    <ToggleGroupPrimitive.Root type="single" value={value} className={`seg ${className}`}
+      // Clicking the chosen option again would clear it; a switch always has one value.
+      onValueChange={v => { if (v) onChange(v as K); }}>
       {options.map(([k, label]) => (
-        <button type="button" key={k} className={k === value ? 'on' : ''} onClick={() => onChange(k)}>
+        <ToggleGroupPrimitive.Item key={k} value={k} className={k === value ? 'on' : ''}>
           {label}
-        </button>
+        </ToggleGroupPrimitive.Item>
       ))}
-    </div>
+    </ToggleGroupPrimitive.Root>
   );
 }
 
@@ -139,37 +149,33 @@ export function RangePicker({ value, onChange, compact = false, alignRight = fal
 }) {
   const { today } = useLedger();
   const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
   const [from, to] = rangeDates(value, today);
 
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: MouseEvent) => { if (!ref.current?.contains(e.target as Node)) setOpen(false); };
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
-    document.addEventListener('mousedown', onDown);
-    document.addEventListener('keydown', onKey);
-    return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey); };
-  }, [open]);
-
+  // Radix Popover handles outside clicks, Esc, focus and keeping the list on screen.
   return (
-    <div className={`range${compact ? ' compact' : ''}`} ref={ref}>
-      <button type="button" className="select range-btn" onClick={() => setOpen(o => !o)} aria-expanded={open} aria-haspopup="listbox"
-        title={compact ? rangeLabel(from, to, today) : undefined}>
-        {rangeName(value)}
-      </button>
-      {!compact && <span className="muted small">{rangeLabel(from, to, today)}</span>}
-      {open && (
-        <div className={`range-pop${alignRight ? ' right' : ''}`} role="listbox">
+    <div className={`range${compact ? ' compact' : ''}`}>
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <button type="button" className="select range-btn" aria-haspopup="listbox"
+            title={compact ? rangeLabel(from, to, today) : undefined}>
+            {rangeName(value)}
+          </button>
+        </PopoverTrigger>
+        <PopoverContent align={alignRight ? 'end' : 'start'} sideOffset={4}
+          className="grid w-[min(400px,calc(100vw-32px))] grid-cols-3 gap-0 p-1" role="listbox">
           {RANGE_ROWS.map((row, i) => row === 'divider'
-            ? <div key={i} className="range-div" />
+            ? <div key={i} className="col-span-3 mx-0.5 my-1 h-px bg-border" />
             : row.map(([k, label]) => (
-              <button type="button" key={k} role="option" aria-selected={k === value} className={k === value ? 'on' : ''}
+              <button type="button" key={k} role="option" aria-selected={k === value}
+                className={cn('truncate rounded-[5px] px-2 py-[7px] text-left text-[12.5px] hover:bg-accent',
+                  k === value && 'bg-primary text-primary-foreground hover:bg-primary')}
                 onClick={() => { onChange(k); setOpen(false); }}>
                 {label}
               </button>
             )))}
-        </div>
-      )}
+        </PopoverContent>
+      </Popover>
+      {!compact && <span className="muted small">{rangeLabel(from, to, today)}</span>}
     </div>
   );
 }
@@ -187,5 +193,40 @@ export function UserRow() {
         </svg>
       </button>
     </div>
+  );
+}
+
+/**
+ * The app's dialog: shadcn/Radix Dialog (focus trap, Esc, inert background, focus restore) with a
+ * header, a scrolling body and a footer. Full screen on phones.
+ */
+export function SheetDialog({ title, head, children, foot, onClose, width = 660, onSubmit }: {
+  title: string;
+  /** Extra header controls, between the title and the close button. */
+  head?: ReactNode;
+  children: ReactNode;
+  foot: ReactNode;
+  onClose: () => void;
+  width?: number;
+  /** Makes the dialog a form: Enter submits. */
+  onSubmit?: () => void;
+}) {
+  const Body = onSubmit ? 'form' : 'div';
+  return (
+    <Dialog open onOpenChange={o => { if (!o) onClose(); }}>
+      <DialogContent showCloseButton={false} aria-describedby={undefined} style={{ maxWidth: `min(${width}px, calc(100% - 2rem))` }}
+        className={cn('flex max-h-[calc(100dvh-32px)] flex-col gap-0 overflow-hidden rounded-[10px] bg-card p-0 shadow-[var(--shadow)]',
+          'max-[760px]:h-dvh max-[760px]:max-h-none max-[760px]:!max-w-none max-[760px]:rounded-none max-[760px]:border-0')}>
+        <Body className="contents" onSubmit={onSubmit ? e => { e.preventDefault(); onSubmit(); } : undefined}>
+          <div className="sheet-head">
+            <DialogTitle className="t">{title}</DialogTitle>
+            {head}
+            <DialogClose className="x" title="Close (Esc)">×</DialogClose>
+          </div>
+          <div className="sheet-body">{children}</div>
+          <div className="sheet-foot">{foot}</div>
+        </Body>
+      </DialogContent>
+    </Dialog>
   );
 }

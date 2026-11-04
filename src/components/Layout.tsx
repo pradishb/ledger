@@ -10,7 +10,9 @@ import { todayStr } from '../lib/dates';
 import { errorMessage } from '../lib/format';
 import type { Txn } from '../lib/types';
 import { blankDraft, draftFromTxn, TxnModal, type Draft } from './TxnModal';
-import { Seg, UserRow } from './ui';
+import { Seg, UserRow } from './common';
+import { toast as sonner } from 'sonner';
+import { Toaster } from '@/components/ui/sonner';
 
 export function Layout({ onSignOut, email }: { onSignOut: () => void; email: string }) {
   const online = useOnline();
@@ -28,13 +30,7 @@ export function Layout({ onSignOut, email }: { onSignOut: () => void; email: str
   const setTheme = useCallback((t: Theme) => { applyTheme(t); setThemeState(t); }, []);
 
   const [modal, setModal] = useState<{ draft: Draft; n: number } | null>(null);
-  const [toastMsg, setToastMsg] = useState('');
-  const toastTimer = useRef<number>(undefined);
-  const toast = useCallback((msg: string) => {
-    window.clearTimeout(toastTimer.current);
-    setToastMsg(msg);
-    toastTimer.current = window.setTimeout(() => setToastMsg(''), 2200);
-  }, []);
+  const toast = useCallback((msg: string) => { sonner(msg); }, []);
 
   const idx = useMemo(() => data && buildIndex(data, disp, rates.data), [data, disp, rates.data]);
   const bal = useMemo(() => data && balances(data, today), [data, today]);
@@ -119,7 +115,8 @@ export function Layout({ onSignOut, email }: { onSignOut: () => void; email: str
         <button className="fab" onClick={openAdd} disabled={!online} aria-label="New transaction">+</button>
 
         {modal && <TxnModal key={modal.n} initial={modal.draft} onClose={closeModal} />}
-        {toastMsg && <div className="toast" role="status">{toastMsg}</div>}
+        {/* Above the phone tab bar; bottom centre on desktop. */}
+        <Toaster theme={theme} position="bottom-center" duration={2600} mobileOffset={{ bottom: 'calc(84px + env(safe-area-inset-bottom))' }} />
       </div>
     </LedgerContext.Provider>
   );

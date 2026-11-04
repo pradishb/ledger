@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useLedger } from '../data/context';
-import { Bar, Dot, Header, RangePicker, Seg, useRange } from '../components/ui';
+import { Bar, Dot, Header, RangePicker, Seg, useRange } from '../components/common';
 import { Donut, type Seg as DonutSeg } from '../components/Charts';
 import { flows } from '../lib/ledger';
 import { rangeDates, rangeName } from '../lib/dates';
@@ -98,7 +98,7 @@ export function Stats() {
             </div>
 
             <div className="panel">
-              <table className="tbl fixed">
+              <table className="tbl tbl-fixed">
                 <thead>
                   <tr>
                     <th>{by === 'cat' ? 'Category' : 'Payee'}</th>
