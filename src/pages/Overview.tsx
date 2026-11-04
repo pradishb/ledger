@@ -64,7 +64,9 @@ export function Overview() {
     return { ...m, inc: sumType(fl, 'inc', idx), exp: sumType(fl, 'exp', idx) };
   });
 
-  const groupRows = (list: typeof data.accounts) => list.map(a => {
+  // Biggest first, compared in the display currency; accounts with no rate go last.
+  const dispBal = (id: number) => idx.convert(bal.get(id) ?? 0, idx.accCur(id), idx.disp) ?? -Infinity;
+  const groupRows = (list: typeof data.accounts) => [...list].sort((x, y) => dispBal(y.id) - dispBal(x.id) || x.sort - y.sort).map(a => {
     const b = bal.get(a.id) ?? 0;
     return (
       <tr className="clickable" key={a.id} onClick={() => navigate(`/accounts/${a.id}`)}>
@@ -77,7 +79,7 @@ export function Overview() {
 
   // A group's share: of everything you own if it's positive, of everything you owe if negative,
   // so each side adds up to 100% and debts don't skew the assets.
-  const groups = accountGroups(data.accounts.filter(a => !a.hidden), bal, idx, groupBy);
+  const groups = accountGroups(data.accounts.filter(a => !a.hidden), bal, idx, groupBy).sort((x, y) => y.balance - x.balance);
   const owned = groups.reduce((t, g) => t + Math.max(0, g.balance), 0);
   const owed = groups.reduce((t, g) => t + Math.max(0, -g.balance), 0);
   const share = (b: number) => {
