@@ -2,7 +2,6 @@
 
 export type AccountType = 'bank' | 'cash' | 'credit' | 'asset' | 'liability';
 export type CatType = 'exp' | 'inc';
-export type Status = 'none' | 'clr' | 'rec';
 
 export interface Account {
   id: number;
@@ -51,7 +50,6 @@ export interface Txn {
   cat: number;
   memo: string;
   tags: string[];
-  status: Status;
   splits: Split[] | null;
 }
 

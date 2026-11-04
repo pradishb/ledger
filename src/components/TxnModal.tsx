@@ -3,7 +3,7 @@ import { useLedger } from '../data/context';
 import { api, useLedgerMutation, type TxnPayload } from '../data/api';
 import { centsOr0, centsToInput, currencySymbol, errorMessage, fmt, parseMoney } from '../lib/format';
 import { PAYMENTS } from '../lib/types';
-import type { Account, CatType, Status, Txn } from '../lib/types';
+import type { Account, CatType, Txn } from '../lib/types';
 import type { Index } from '../lib/ledger';
 import { Seg } from './ui';
 
@@ -26,7 +26,6 @@ export interface Draft {
   cat: string;
   memo: string;
   tags: string;
-  status: Status;
   split: boolean;
   splits: Line[];
 }
@@ -38,7 +37,7 @@ export function blankDraft(accounts: Account[], today: string, base: Partial<Dra
   const acc = base.acc ?? String(curAcc || accounts[0]?.id || 0);
   return {
     id: 0, type: 'exp', date: today, amount: '', xamount: '', acc, xfer: otherAccount(accounts, acc), pay: 'None', info: '',
-    payee: '0', cat: '0', memo: '', tags: '', status: 'none', split: false, splits: blankLines(),
+    payee: '0', cat: '0', memo: '', tags: '', split: false, splits: blankLines(),
     ...base,
   };
 }
@@ -53,7 +52,7 @@ export function draftFromTxn(t: Txn, accounts: Account[]): Draft {
     acc: String(t.acc),
     xfer: t.xfer ? String(t.xfer) : otherAccount(accounts, String(t.acc)),
     pay: t.pay, info: t.info, payee: String(t.payee), cat: String(t.cat), memo: t.memo,
-    tags: t.tags.join(', '), status: t.status,
+    tags: t.tags.join(', '),
     split: !!t.splits,
     splits: t.splits ? t.splits.map(s => ({ cat: String(s.cat), memo: s.memo, amount: centsToInput(s.amount) })) : blankLines(),
   };
@@ -110,7 +109,6 @@ function toPayload(d: Draft, idx: Index): TxnPayload | string {
     category_id: isX || d.split ? null : +d.cat,
     memo: d.memo.trim(),
     tags: d.tags.split(',').map(x => x.trim()).filter(Boolean),
-    status: d.status,
     splits: isX ? [] : splits,
   };
 }
@@ -161,7 +159,7 @@ export function TxnModal({ initial, onClose }: { initial: Draft; onClose: () => 
     try {
       await saveM.mutateAsync(p);
       toast(d.id ? 'Transaction updated' : 'Transaction added');
-      if (keep) setDraft(blankDraft(accounts, today, { type: d.type, date: d.date, acc: d.acc, pay: d.pay, status: d.status }));
+      if (keep) setDraft(blankDraft(accounts, today, { type: d.type, date: d.date, acc: d.acc, pay: d.pay }));
       else onClose();
     } catch (e) {
       setErr(errorMessage(e));
@@ -286,10 +284,6 @@ export function TxnModal({ initial, onClose }: { initial: Draft; onClose: () => 
             <label className="field full">Tags
               <input className="input" value={d.tags} onChange={e => setD({ tags: e.target.value })} placeholder="Comma separated, e.g. work, vacation" />
             </label>
-            <div className="field full">Status
-              <Seg className="md" value={d.status} onChange={k => setD({ status: k })}
-                options={[['none', 'None'], ['clr', 'Cleared'], ['rec', 'Reconciled']] as const} />
-            </div>
           </div>
           {err && <div className="err">{err}</div>}
           {!online && <div className="err">You're offline. Changes can't be saved until you reconnect.</div>}

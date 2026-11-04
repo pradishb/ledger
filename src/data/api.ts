@@ -3,7 +3,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from './supabase';
 import { STARTER_CATEGORIES } from '../lib/types';
-import type { Account, AccountType, CatType, Category, LedgerData, Payee, Status, Txn } from '../lib/types';
+import type { Account, AccountType, CatType, Category, LedgerData, Payee, Txn } from '../lib/types';
 
 export const LEDGER_KEY = ['ledger'] as const;
 
@@ -29,7 +29,7 @@ interface TxnRow {
   id: number; date: string; account_id: number; transfer_account_id: number | null; amount_cents: number;
   transfer_amount_cents: number | null;
   payment: string; info: string; payee_id: number | null; category_id: number | null; memo: string;
-  tags: string[]; status: Status; transaction_splits: SplitRow[];
+  tags: string[]; transaction_splits: SplitRow[];
 }
 
 export async function fetchLedger(): Promise<LedgerData> {
@@ -39,7 +39,7 @@ export async function fetchLedger(): Promise<LedgerData> {
     fetchAll<PayeeRow>((a, b) => supabase.from('payees').select('id,name,default_category_id,default_payment').order('id').range(a, b)),
     fetchAll<TxnRow>((a, b) =>
       supabase.from('transactions')
-        .select('id,date,account_id,transfer_account_id,amount_cents,transfer_amount_cents,payment,info,payee_id,category_id,memo,tags,status,transaction_splits(position,category_id,memo,amount_cents)')
+        .select('id,date,account_id,transfer_account_id,amount_cents,transfer_amount_cents,payment,info,payee_id,category_id,memo,tags,transaction_splits(position,category_id,memo,amount_cents)')
         .order('id').range(a, b)),
   ]);
   return {
@@ -52,7 +52,7 @@ export async function fetchLedger(): Promise<LedgerData> {
       id: r.id, date: r.date, acc: r.account_id, xfer: r.transfer_account_id ?? 0, amount: Number(r.amount_cents),
       xamt: r.transfer_amount_cents == null ? null : Number(r.transfer_amount_cents),
       pay: r.payment, info: r.info, payee: r.payee_id ?? 0, cat: r.category_id ?? 0, memo: r.memo,
-      tags: r.tags ?? [], status: r.status,
+      tags: r.tags ?? [],
       splits: r.transaction_splits?.length
         ? [...r.transaction_splits].sort((x, y) => x.position - y.position)
             .map(s => ({ cat: s.category_id, memo: s.memo, amount: Number(s.amount_cents) }))
@@ -79,7 +79,6 @@ export interface TxnPayload {
   category_id: number | null;
   memo: string;
   tags: string[];
-  status: Status;
   splits: { category_id: number; memo: string; amount_cents: number }[];
 }
 
