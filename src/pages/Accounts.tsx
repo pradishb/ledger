@@ -20,6 +20,8 @@ export function Accounts() {
   const navigate = useNavigate();
   const add = useLedgerMutation(api.addAccount);
   const setHidden = useLedgerMutation(api.setAccountHidden);
+  const bulk = useLedgerMutation(api.updateAccounts);
+  const [picked, setPicked] = useState<Set<number>>(new Set());
   const [prefs, setPrefs] = usePrefs();
   const [q, setQ] = useState('');
   const [name, setName] = useState('');
@@ -59,6 +61,32 @@ export function Accounts() {
     }
     return c * dir || x.sort - y.sort || x.id - y.id;
   });
+
+  // Only rows still on screen count as selected, so a filter never edits accounts you can't see.
+  const sel = rows.filter(a => picked.has(a.id));
+  const allPicked = rows.length > 0 && sel.length === rows.length;
+  const togglePick = (id: number) => setPicked(prev => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
+  const pickAll = () => setPicked(allPicked ? new Set() : new Set(rows.map(a => a.id)));
+
+  async function apply(patch: { hidden?: boolean; type?: AccountType; institution?: string }, done: string) {
+    if (!sel.length) return;
+    try {
+      await bulk.mutateAsync({ ids: sel.map(a => a.id), patch });
+      toast(`${done} ${sel.length} account${sel.length === 1 ? '' : 's'}`);
+      setPicked(new Set());
+    } catch (err) {
+      toast(errorMessage(err));
+    }
+  }
+  function setInstitution() {
+    const shared = new Set(sel.map(a => a.institution));
+    const v = prompt(`Institution for ${sel.length} account${sel.length === 1 ? '' : 's'} (leave empty to clear):`, shared.size === 1 ? [...shared][0] : '');
+    if (v !== null) apply({ institution: v.trim() }, 'Updated');
+  }
 
   const shownTotal = sumBy(rows, a => idx.toDisp(a.id, bal.get(a.id) ?? 0));
   const netWorth = sumBy(data.accounts, a => idx.toDisp(a.id, bal.get(a.id) ?? 0));
@@ -108,6 +136,22 @@ export function Accounts() {
             <span className="muted" style={{ fontSize: 12 }}>Enter amounts you owe (cards, loans) as negative.</span>
           </form>
 
+          {sel.length > 0 && (
+            <div className="bulk-bar" role="toolbar" aria-label="Bulk edit">
+              <b>{sel.length} selected</b>
+              <button type="button" className="btn sm" disabled={!online || bulk.isPending || sel.every(a => a.hidden)} onClick={() => apply({ hidden: true }, 'Hid')}>Hide</button>
+              <button type="button" className="btn sm" disabled={!online || bulk.isPending || sel.every(a => !a.hidden)} onClick={() => apply({ hidden: false }, 'Showing')}>Show</button>
+              <select className="select" value="" disabled={!online || bulk.isPending} aria-label="Change type"
+                onChange={e => e.target.value && apply({ type: e.target.value as AccountType }, `Set type to ${TYPE_LABEL.get(e.target.value as AccountType)} for`)}>
+                <option value="">Change type…</option>
+                {ACCOUNT_TYPES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+              </select>
+              <button type="button" className="btn sm" disabled={!online || bulk.isPending} onClick={setInstitution}>Set institution…</button>
+              <span className="spacer" />
+              <button type="button" className="link" onClick={() => setPicked(new Set())}>Clear selection</button>
+            </div>
+          )}
+
           <div className="filter-bar">
             <input className="input search" type="search" placeholder="Search accounts" value={q} onChange={e => setQ(e.target.value)} aria-label="Search accounts" />
             <select className="select" value={prefs.type} onChange={e => setPrefs({ type: e.target.value as AccountType | '' })} aria-label="Type">
@@ -132,6 +176,10 @@ export function Accounts() {
           <table className="tbl">
             <thead>
               <tr>
+                <th className="pick">
+                  <input type="checkbox" checked={allPicked} ref={el => { if (el) el.indeterminate = sel.length > 0 && !allPicked; }}
+                    onChange={pickAll} aria-label={allPicked ? 'Select none' : 'Select all shown'} disabled={!rows.length} />
+                </th>
                 {th('name', 'Account')}
                 {th('type', 'Type', 'hide-m', { width: 120 })}
                 {th('inst', 'Institution', 'hide-m')}
@@ -145,7 +193,10 @@ export function Accounts() {
                 const b = bal.get(a.id) ?? 0;
                 const conv = idx.convert(b, a.currency, idx.disp);
                 return (
-                  <tr className={`clickable${a.hidden ? ' is-hidden' : ''}`} key={a.id} onClick={() => navigate(`/accounts/${a.id}`)}>
+                  <tr className={`clickable${a.hidden ? ' is-hidden' : ''}${picked.has(a.id) ? ' picked' : ''}`} key={a.id} onClick={() => navigate(`/accounts/${a.id}`)}>
+                    <td className="pick" onClick={e => { e.stopPropagation(); togglePick(a.id); }}>
+                      <input type="checkbox" checked={picked.has(a.id)} onChange={() => togglePick(a.id)} onClick={e => e.stopPropagation()} aria-label={`Select ${a.name}`} />
+                    </td>
                     <td>{a.name}{a.hidden && <span className="tag">Hidden</span>}</td>
                     <td className="small hide-m">{TYPE_LABEL.get(a.type)}</td>
                     <td className="small muted hide-m">{a.institution}</td>
@@ -174,6 +225,7 @@ export function Accounts() {
               <tfoot>
                 {filtered && (
                   <tr className="group">
+                    <td className="pick" />
                     <td style={{ fontWeight: 600 }}>Total shown</td>
                     <td className="hide-m" /><td className="hide-m" /><td className="hide-m" />
                     <td className="num" style={{ fontWeight: 600, color: balColor(shownTotal) }}>{fmt(shownTotal, idx.disp)}</td>
@@ -181,6 +233,7 @@ export function Accounts() {
                   </tr>
                 )}
                 <tr className="group">
+                  <td className="pick" />
                   <td style={{ fontWeight: 600 }}>Net worth <span className="muted small" style={{ fontWeight: 400 }}>· all accounts</span></td>
                   <td className="hide-m" /><td className="hide-m" /><td className="hide-m" />
                   <td className="num" style={{ fontWeight: 600, color: balColor(netWorth) }}>

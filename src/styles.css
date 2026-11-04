@@ -52,11 +52,15 @@ a { color: var(--acc); }
 .icon-btn { width: 28px; height: 28px; flex: none; display: grid; place-items: center; border: 0; border-radius: 6px; background: transparent; color: var(--ink3); }
 .icon-btn:hover { background: var(--hover); color: var(--neg); }
 .icon-btn.eye:hover { color: var(--ink); }
+.bulk-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 14px; background: var(--accSoft); border-bottom: 1px solid var(--line); font-size: 12.5px; }
+.tbl th.pick, .tbl td.pick { width: 34px; padding-right: 0; cursor: default; }
+.tbl th.pick + th.sortable button, .tbl td.pick + td { padding-left: 6px; }
+.pick input { display: block; margin: 0; cursor: pointer; accent-color: var(--acc); }
+.tbl tr.picked td { background: var(--sel); }
 .filter-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 14px; border-bottom: 1px solid var(--line); }
 .filter-bar .search { width: 220px; }
 .tbl th.sortable { padding: 0; }
 .tbl th.sortable button { display: flex; align-items: center; gap: 4px; width: 100%; padding: 7px 8px; border: 0; background: none; font: inherit; color: inherit; text-align: inherit; cursor: pointer; }
-.tbl th.sortable:first-child button { padding-left: 14px; }
 .tbl th.sortable.r button { justify-content: flex-end; }
 .tbl th.sortable button:hover { color: var(--ink); }
 .tbl th.sortable[aria-sort='ascending'] button, .tbl th.sortable[aria-sort='descending'] button { color: var(--ink); font-weight: 600; }
