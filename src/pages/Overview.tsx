@@ -99,7 +99,7 @@ export function Overview() {
             </div>
           )}
 
-          <div className="toolbar"><RangePicker value={range} onChange={setRange} /></div>
+          <div className="toolbar"><RangePicker compact value={range} onChange={setRange} /></div>
 
           <div className="kpis">
             {kpis.map(k => (
