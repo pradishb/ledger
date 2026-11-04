@@ -2,13 +2,13 @@ import { Link, useNavigate } from 'react-router';
 import { useLedger } from '../data/context';
 import { api, useLedgerMutation } from '../data/api';
 import { Bar, Chevron, DisplayCurrency, Dot, Header, Panel, RangePicker, useOpenGroups, useRange } from '../components/ui';
-import { ChartIE, Sized } from '../components/Charts';
-import { accountGroups, balColor, describeTxn, flows, sumType } from '../lib/ledger';
-import { buckets, fdate, longDate, rangeDates, rangeName, UNIT_NAME } from '../lib/dates';
+import { ChartIE, Donut, SizedBox } from '../components/Charts';
+import { accountGroups, balColor, flows, sumType } from '../lib/ledger';
+import { buckets, longDate, rangeDates, rangeName, UNIT_NAME } from '../lib/dates';
 import { errorMessage, fmt, fmt0 } from '../lib/format';
 
 export function Overview() {
-  const { data, idx, bal, today, netWorth, openEdit, isMobile, online, toast } = useLedger();
+  const { data, idx, bal, today, netWorth, online, toast } = useLedger();
   const navigate = useNavigate();
   const { isOpen, toggle } = useOpenGroups();
   const seed = useLedgerMutation(api.seedCategories);
@@ -37,6 +37,11 @@ export function Overview() {
   }
   const spend = [...byTop].map(([id, val]) => ({ c: idx.catMap.get(id)!, val })).filter(x => x.val > 0).sort((a, b) => b.val - a.val);
   const spendMax = spend[0]?.val || 1;
+  // Keep the panel short: the biggest categories, then everything else on one line.
+  const TOP = 6;
+  const spendTop = spend.length > TOP + 1 ? spend.slice(0, TOP) : spend;
+  const rest = spend.slice(spendTop.length);
+  const restVal = rest.reduce((a, x) => a + x.val, 0);
 
   // Chart the selected range; open-ended ranges stop where the transactions do.
   let first = today, last = today;
@@ -48,9 +53,15 @@ export function Overview() {
     return { ...m, inc: sumType(fl, 'inc', idx), exp: sumType(fl, 'exp', idx) };
   });
 
-  const recent = data.txns.filter(t => t.date <= today)
-    .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : b.id - a.id))
-    .slice(0, isMobile ? 6 : 9);
+  const groupRows = (list: typeof data.accounts) => list.map(a => {
+    const b = bal.get(a.id) ?? 0;
+    return (
+      <tr className="clickable" key={a.id} onClick={() => navigate(`/accounts/${a.id}`)}>
+        <td style={{ paddingLeft: 28 }}>{a.name}</td>
+        <td className="num" style={{ color: balColor(b) }}>{fmt(b, idx.accCur(a.id))}</td>
+      </tr>
+    );
+  });
 
   const needsSetup = !data.accounts.length || !data.cats.length;
 
@@ -58,7 +69,7 @@ export function Overview() {
     <>
       <Header title="Overview" subtitle={longDate(today)}><DisplayCurrency /></Header>
       <div className="content">
-        <div className="stack">
+        <div className="stack dash">
           {needsSetup && (
             <div className="panel onboard">
               <b>Welcome to Ledger</b>
@@ -92,8 +103,9 @@ export function Overview() {
             ))}
           </div>
 
-          <div className="grid2">
+          <div className="dash3">
             <Panel title="Accounts" action={<Link className="link" to="/accounts">All accounts</Link>}>
+              <div className="panel-body">
               <table className="tbl">
                 <tbody>
                   {accountGroups(data.accounts, bal, idx).map(g => [
@@ -103,24 +115,26 @@ export function Overview() {
                       </td>
                       <td className="num" style={{ fontWeight: 600, color: balColor(g.balance) }}>{fmt(g.balance, idx.disp)}</td>
                     </tr>,
-                    ...(isOpen(g.label) ? g.accounts : []).map(a => {
-                      const b = bal.get(a.id) ?? 0;
-                      return (
-                        <tr className="clickable" key={a.id} onClick={() => navigate(`/accounts/${a.id}`)}>
-                          <td style={{ paddingLeft: 28 }}>{a.name}</td>
-                          <td className="num" style={{ color: balColor(b) }}>{fmt(b, idx.accCur(a.id))}</td>
-                        </tr>
-                      );
-                    }),
+                    ...(isOpen(g.label) ? groupRows(g.accounts) : []),
                   ])}
                 </tbody>
               </table>
               {!data.accounts.length && <div className="empty">No accounts yet.</div>}
+              </div>
             </Panel>
 
-            <Panel title={`Spending · ${rl}`} action={<Link className="link" to="/stats">Statistics</Link>}>
-              <div style={{ padding: '6px 0' }}>
-                {spend.map(x => (
+            <Panel title={`Where your money goes · ${rl}`} action={<Link className="link" to="/stats">Statistics</Link>}>
+              <div className="panel-body">
+                {spend.length > 0 && (
+                  <div className="donut-wrap">
+                    <Donut size={150} segs={[
+                      ...spendTop.map(x => ({ name: x.c.name, value: x.val, color: x.c.color ?? 'var(--ink3)' })),
+                      ...(restVal ? [{ name: 'Other', value: restVal, color: 'var(--line2)' }] : []),
+                    ]} />
+                    <div className="donut-mid"><span className="muted">Total</span><b className="mono">{fmt0(exp, idx.disp)}</b></div>
+                  </div>
+                )}
+                {spendTop.map(x => (
                   <div className="spend-row" key={x.c.id}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
                       <Dot color={x.c.color ?? 'var(--ink3)'} />
@@ -131,36 +145,28 @@ export function Overview() {
                     <div className="r mono muted" style={{ fontSize: 11.5 }}>{exp ? Math.round((x.val / exp) * 100) : 0}%</div>
                   </div>
                 ))}
+                {rest.length > 0 && (
+                  <Link className="spend-row spend-other" to="/stats">
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                      <Dot color="var(--line2)" />
+                      <span className="ell">Other {rest.length} categories</span>
+                    </div>
+                    <Bar width={(restVal / spendMax) * 100} color="var(--line2)" />
+                    <div className="r mono" style={{ fontSize: 12 }}>{fmt(restVal, idx.disp)}</div>
+                    <div className="r mono muted" style={{ fontSize: 11.5 }}>{exp ? Math.round((restVal / exp) * 100) : 0}%</div>
+                  </Link>
+                )}
                 {!spend.length && <div className="empty">No spending in this period.</div>}
               </div>
             </Panel>
 
-            <Panel title={`Income and expenses · ${rl}, ${UNIT_NAME[chart.unit]}`} action={
+            <Panel title={`Income and expenses · ${UNIT_NAME[chart.unit]}`} action={
               <div className="legend">
                 <span><Dot color="var(--acc)" />Income</span>
                 <span><Dot color="var(--exp)" />Expenses</span>
               </div>
             }>
-              <div style={{ padding: '10px 10px 6px' }}><Sized>{w => <ChartIE months={months} w={w} h={196} />}</Sized></div>
-            </Panel>
-
-            <Panel title="Recent transactions" action={<Link className="link" to="/transactions">All transactions</Link>}>
-              <table className="tbl fixed">
-                <tbody>
-                  {recent.map(t => {
-                    const v = describeTxn(t, t.amount, 0, idx);
-                    return (
-                      <tr key={t.id} onDoubleClick={() => openEdit(t)} onClick={isMobile ? () => openEdit(t) : undefined} style={{ cursor: 'default' }}>
-                        <td className="small muted" style={{ width: 64, whiteSpace: 'nowrap', paddingRight: 0 }}>{fdate(t.date, today)}</td>
-                        <td className="ell">{v.payee}</td>
-                        <td className="ell small hide-m" style={{ color: v.catColor }}>{v.category}</td>
-                        <td className="num" style={{ width: 100, color: v.amtColor }}>{fmt(t.amount, idx.accCur(t.acc))}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-              {!recent.length && <div className="empty">No transactions yet.</div>}
+              <SizedBox style={{ padding: '10px 10px 6px', minHeight: 260 }}>{(w, h) => <ChartIE months={months} w={w} h={h} />}</SizedBox>
             </Panel>
           </div>
         </div>

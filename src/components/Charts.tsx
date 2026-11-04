@@ -18,6 +18,20 @@ export function Sized({ children }: { children: (w: number) => ReactNode }) {
   return <div ref={ref}>{w > 0 && children(w)}</div>;
 }
 
+/** Like Sized, but fills its container and passes both width and height. */
+export function SizedBox({ children, style }: { children: (w: number, h: number) => ReactNode; style?: CSSProperties }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [box, setBox] = useState({ w: 0, h: 0 });
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([e]) => setBox({ w: Math.round(e.contentRect.width), h: Math.round(e.contentRect.height) }));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  return <div ref={ref} style={{ flex: 1, minHeight: 0, ...style }}>{box.w > 0 && box.h > 0 && children(box.w, box.h)}</div>;
+}
+
 function niceMax(v: number) {
   if (v <= 0) return 1;
   const e = Math.pow(10, Math.floor(Math.log10(v)));
@@ -85,13 +99,13 @@ export function ChartStack({ months, series, w, h }: { months: Month[]; series: 
 
 export interface Seg { name: string; value: number; color: string }
 
-export function Donut({ segs }: { segs: Seg[] }) {
+export function Donut({ segs, size = 220 }: { segs: Seg[]; size?: number }) {
   const cur = useLedger().idx.disp;
   const S = 220, r = 86, sw = 26, C = 2 * Math.PI * r;
   const tot = segs.reduce((a, s) => a + s.value, 0) || 1;
   let acc = 0;
   return (
-    <svg viewBox={`0 0 ${S} ${S}`} width={S} height={S} style={{ display: 'block' }}>
+    <svg viewBox={`0 0 ${S} ${S}`} width={size} height={size} style={{ display: 'block' }}>
       <circle cx={S / 2} cy={S / 2} r={r} fill="none" strokeWidth={sw} style={{ stroke: 'var(--sunk)' }} />
       {segs.map((s, i) => {
         const len = (s.value / tot) * C;
