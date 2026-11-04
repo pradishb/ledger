@@ -85,6 +85,14 @@ export interface TxnPayload {
 export const api = {
   saveTxn: async (p: TxnPayload) => check(await supabase.rpc('save_transaction', { p })).data as number,
   deleteTxn: async (id: number) => void check(await supabase.from('transactions').delete().eq('id', id)),
+  /** Bulk edits. Split lines are deleted with their transaction. */
+  deleteTxns: async (ids: number[]) => void check(await supabase.from('transactions').delete().in('id', ids)),
+  updateTxns: async ({ ids, patch }: { ids: number[]; patch: { category_id?: number; payee_id?: number | null; payment?: string } }) =>
+    void check(await supabase.from('transactions').update(patch).in('id', ids)),
+  /** Set tags on many transactions, one request per distinct resulting tag list. */
+  setTxnTags: async (changes: { ids: number[]; tags: string[] }[]) => {
+    for (const c of changes) check(await supabase.from('transactions').update({ tags: c.tags }).in('id', c.ids));
+  },
 
   addAccount: async (a: Omit<Account, 'id' | 'sort' | 'hidden'>) =>
     void check(await supabase.from('accounts').insert({

@@ -131,7 +131,9 @@ input.input[type='date']::-webkit-date-and-time-value { text-align: left; margin
 .chev { display: inline-block; margin-right: 8px; vertical-align: -1px; transition: transform .15s; }
 .chev.open { transform: rotate(90deg); }
 .tbl tr.sel { background: var(--sel); }
-.reg-row { user-select: none; cursor: default; }
+.reg-row { user-select: none; }
+.reg-row:hover td { background: var(--hover); }
+.tbl tr.reg-row.picked td { background: var(--sel); }
 .empty { padding: 28px; text-align: center; color: var(--ink3); }
 .foot { display: flex; flex-wrap: wrap; gap: 6px 18px; align-items: center; padding: 8px 14px; border-top: 1px solid var(--line); background: var(--sunk); font-size: 11.5px; color: var(--ink3); }
 
