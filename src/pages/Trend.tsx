@@ -32,8 +32,8 @@ export function Trend() {
     chart = w => <ChartIE months={months.map((m, i) => ({ ...m, inc: inc[i], exp: exp[i] }))} w={w} h={220} />;
     legend = [{ key: 'i', name: 'Income', color: 'var(--acc)', op: 1 }, { key: 'e', name: 'Expenses', color: 'var(--exp)', op: 1 }];
     rows = [
-      { name: 'Income', color: 'var(--acc)', cells: inc.map(x => cell(x, 'var(--pos)')), total: fmt0(T(inc), idx.disp), avg: fmt0(T(inc) / N, idx.disp), totColor: 'var(--pos)', weight: 400, op: 1 },
-      { name: 'Expenses', color: 'var(--exp)', cells: exp.map(x => cell(x)), total: fmt0(T(exp), idx.disp), avg: fmt0(T(exp) / N, idx.disp), totColor: 'var(--ink)', weight: 400, op: 1 },
+      { name: 'Income', color: 'var(--acc)', cells: inc.map(x => cell(x, 'var(--inc)')), total: fmt0(T(inc), idx.disp), avg: fmt0(T(inc) / N, idx.disp), totColor: 'var(--inc)', weight: 400, op: 1 },
+      { name: 'Expenses', color: 'var(--exp)', cells: exp.map(x => cell(x, 'var(--out)')), total: fmt0(T(exp), idx.disp), avg: fmt0(T(exp) / N, idx.disp), totColor: 'var(--out)', weight: 400, op: 1 },
       { name: 'Net', color: 'transparent', cells: net.map(x => cell(x, balColor(x))), total: fmt0(T(net), idx.disp), avg: fmt0(T(net) / N, idx.disp), totColor: balColor(T(net)), weight: 600, op: 1 },
       {
         name: 'Savings rate', color: 'transparent',

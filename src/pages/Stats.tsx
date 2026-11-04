@@ -118,7 +118,7 @@ export function Stats() {
                         </span>
                       </td>
                       <td><Bar width={(Math.max(0, r.amount) / mx) * 100} color={r.color} opacity={r.sub ? 0.55 : 1} height={7} /></td>
-                      <td className="num" style={{ color: r.sub ? 'var(--ink2)' : 'var(--ink)' }}>{fmt(r.amount, idx.disp)}</td>
+                      <td className="num" style={{ color: type === 'exp' ? 'var(--out)' : 'var(--inc)', opacity: r.sub ? 0.75 : 1 }}>{fmt(r.amount, idx.disp)}</td>
                       <td className="num muted" style={{ fontSize: 11.5 }}>{pct(r.amount)}</td>
                     </tr>
                   ))}

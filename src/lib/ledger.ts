@@ -124,7 +124,7 @@ export function describeTxn(t: Txn, amt: number, viewAcc: number, idx: Index) {
     payee,
     category,
     catColor: isX || t.splits ? 'var(--ink3)' : 'var(--ink2)',
-    amtColor: isX ? 'var(--ink2)' : amt > 0 ? 'var(--pos)' : 'var(--ink)',
+    amtColor: isX ? 'var(--ink2)' : amt > 0 ? 'var(--inc)' : 'var(--out)',
   };
 }
 

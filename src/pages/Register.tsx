@@ -292,8 +292,8 @@ export function Register() {
             {!rows.length && <div className="empty">No transactions match these filters.</div>}
             <div className="foot">
               <span>{rows.length} transaction{rows.length === 1 ? '' : 's'}</span>
-              <span>In <span className="mono" style={{ color: 'var(--pos)' }}>{fmt(tin, acur)}</span></span>
-              <span>Out <span className="mono" style={{ color: 'var(--ink)' }}>{fmt(tout, acur)}</span></span>
+              <span>In <span className="mono" style={{ color: 'var(--inc)' }}>{fmt(tin, acur)}</span></span>
+              <span>Out <span className="mono" style={{ color: 'var(--out)' }}>{fmt(tout, acur)}</span></span>
               <div className="spacer" />
               <span>{isMobile ? 'Tap a row to edit.' : 'Click a row to edit. Tick rows (Shift for a range) to edit several.'}</span>
             </div>

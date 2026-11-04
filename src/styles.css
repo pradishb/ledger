@@ -3,7 +3,9 @@
   --bg: #f4f5f2; --panel: #ffffff; --sunk: #eef0ec; --line: #e3e6e1; --line2: #d0d5ce;
   --ink: #151a16; --ink2: #4c564f; --ink3: #69736c;
   --acc: #2f6b4a; --accInk: #ffffff; --accSoft: #e1eee5;
-  --pos: #256b42; --neg: #b03a2e; --exp: oklch(0.72 0.1 50);
+  --pos: #256b42; --neg: #b03a2e; --exp: oklch(0.64 0.16 28);
+  /* Money in and out: income green, expenses red, so the two are never confused with plain text. */
+  --inc: #1e8049; --out: #c0392b;
   --hover: #f2f5f1; --sel: #e6f0e9;
   --shadow: 0 1px 2px rgba(20, 30, 20, .06), 0 16px 48px rgba(20, 30, 20, .16);
   --sans: 'Geist Variable', system-ui, sans-serif;
@@ -14,7 +16,8 @@
   --bg: #0e1110; --panel: #151918; --sunk: #111413; --line: #232927; --line2: #323a36;
   --ink: #e4e9e5; --ink2: #a7b1aa; --ink3: #859089;
   --acc: #5bb585; --accInk: #07130c; --accSoft: #1a2b21;
-  --pos: #6cc495; --neg: #ef7a68; --exp: oklch(0.68 0.1 50);
+  --pos: #6cc495; --neg: #ef7a68; --exp: oklch(0.68 0.15 28);
+  --inc: var(--pos); --out: #f07a68;
   --hover: #1a1f1d; --sel: #1b2c22;
   --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 16px 48px rgba(0, 0, 0, .5);
   color-scheme: dark;

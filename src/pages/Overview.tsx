@@ -27,8 +27,8 @@ export function Overview() {
     { label: 'Net worth', value: fmt(netWorth, idx.disp), sub: idx.unrated.length
       ? `${idx.unrated.join(', ')} left out: no exchange rate`
       : `${fmt0(assets, idx.disp)} assets · ${fmt0(assets - netWorth, idx.disp)} owed`, color: 'var(--ink)' },
-    { label: `Income · ${rl}`, value: fmt(inc, idx.disp), sub: 'Transfers excluded', color: 'var(--pos)' },
-    { label: `Spending · ${rl}`, value: fmt(exp, idx.disp), sub: `${fl30.filter(f => idx.catType(f.cat) === 'exp').length} entries`, color: 'var(--ink)' },
+    { label: `Income · ${rl}`, value: fmt(inc, idx.disp), sub: 'Transfers excluded', color: 'var(--inc)' },
+    { label: `Spending · ${rl}`, value: fmt(exp, idx.disp), sub: `${fl30.filter(f => idx.catType(f.cat) === 'exp').length} entries`, color: 'var(--out)' },
     { label: `Saved · ${rl}`, value: fmt(inc - exp, idx.disp), sub: inc ? `${Math.round(((inc - exp) / inc) * 100)}% of income` : '—', color: balColor(inc - exp) },
   ];
 
