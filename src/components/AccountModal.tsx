@@ -1,21 +1,30 @@
 import { useEffect, useState } from 'react';
 import { useLedger } from '../data/context';
 import { api, useLedgerMutation } from '../data/api';
+import { CURRENCY_CODES, DEFAULT_CURRENCY } from '../data/rates';
 import { currencySymbol, errorMessage, parseMoney } from '../lib/format';
 import { ACCOUNT_TYPES, type Account, type AccountType } from '../lib/types';
+import { CurrencySelect } from './ui';
 
-/** Edit an account's name, type, group, opening balance and visibility. Currency can't change. */
-export function AccountModal({ account, onClose }: { account: Account; onClose: () => void }) {
+/**
+ * Add an account (no `account`), or edit one: name, type, group, opening balance and visibility.
+ * Currency is picked once, when adding, and can't change afterwards.
+ */
+export function AccountModal({ account, onClose }: { account?: Account; onClose: () => void }) {
   const { data, online, toast } = useLedger();
-  const save = useLedgerMutation(api.updateAccount);
-  const [name, setName] = useState(account.name);
-  const [type, setType] = useState<AccountType>(account.type);
-  const [group, setGroup] = useState(account.group);
+  const update = useLedgerMutation(api.updateAccount);
+  const add = useLedgerMutation(api.addAccount);
+  const isNew = !account;
+  const [name, setName] = useState(account?.name ?? '');
+  const [type, setType] = useState<AccountType>(account?.type ?? 'bank');
+  const [group, setGroup] = useState(account?.group ?? '');
   // Keep the sign: an opening balance can be negative (cards, loans).
-  const [opening, setOpening] = useState((account.opening / 100).toFixed(2));
-  const [hidden, setHidden] = useState(account.hidden);
+  const [opening, setOpening] = useState(account ? (account.opening / 100).toFixed(2) : '');
+  const [currency, setCurrency] = useState(account?.currency ?? DEFAULT_CURRENCY);
+  const [hidden, setHidden] = useState(account?.hidden ?? false);
   const [err, setErr] = useState('');
   const groups = [...new Set(data.accounts.map(a => a.group).filter(Boolean))].sort((x, y) => x.localeCompare(y));
+  const busy = update.isPending || add.isPending;
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
@@ -26,12 +35,17 @@ export function AccountModal({ account, onClose }: { account: Account; onClose: 
   async function submit() {
     const n = name.trim();
     if (!n) return setErr('Enter a name.');
-    if (data.accounts.some(a => a.id !== account.id && a.name.toLowerCase() === n.toLowerCase())) return setErr('Another account already has that name.');
+    if (data.accounts.some(a => a.id !== account?.id && a.name.toLowerCase() === n.toLowerCase())) return setErr('Another account already has that name.');
     const cents = opening.trim() ? parseMoney(opening) : 0;
     if (!Number.isFinite(cents)) return setErr('Opening balance must be a number.');
     try {
-      await save.mutateAsync({ id: account.id, name: n, type, group: group.trim(), opening: cents, hidden });
-      toast(`Saved “${n}”`);
+      if (account) {
+        await update.mutateAsync({ id: account.id, name: n, type, group: group.trim(), opening: cents, hidden });
+        toast(`Saved “${n}”`);
+      } else {
+        await add.mutateAsync({ name: n, type, group: group.trim(), opening: cents, currency });
+        toast(`Added “${n}”`);
+      }
       onClose();
     } catch (e) {
       setErr(errorMessage(e));
@@ -43,7 +57,7 @@ export function AccountModal({ account, onClose }: { account: Account; onClose: 
       <form className="sheet" style={{ width: 520 }} onMouseDown={e => e.stopPropagation()} role="dialog" aria-modal="true"
         onSubmit={e => { e.preventDefault(); submit(); }}>
         <div className="sheet-head">
-          <div className="t">Edit account</div>
+          <div className="t">{isNew ? 'New account' : 'Edit account'}</div>
           <button type="button" className="x" onClick={onClose} title="Close (Esc)">×</button>
         </div>
         <div className="sheet-body">
@@ -57,22 +71,28 @@ export function AccountModal({ account, onClose }: { account: Account; onClose: 
               </select>
             </label>
             <label className="field">Group
-              <input className="input" value={group} onChange={e => setGroup(e.target.value)} placeholder="None" list="edit-account-groups" />
-              <datalist id="edit-account-groups">{groups.map(g => <option key={g} value={g} />)}</datalist>
+              <input className="input" value={group} onChange={e => setGroup(e.target.value)} placeholder="None" list="account-modal-groups" />
+              <datalist id="account-modal-groups">{groups.map(g => <option key={g} value={g} />)}</datalist>
+            </label>
+            <label className="field">Currency
+              {isNew
+                ? <CurrencySelect value={currency} onChange={setCurrency} used={data.accounts.map(a => a.currency)} all={CURRENCY_CODES} title="Can't be changed later" />
+                : <input className="input" value={currency} disabled title="An account's currency can't be changed" />}
             </label>
             <label className="field">Opening balance
               <div className="amount-box">
-                <span>{currencySymbol(account.currency)}</span>
+                <span>{currencySymbol(currency)}</span>
                 <input value={opening} onChange={e => setOpening(e.target.value)} placeholder="0.00" inputMode="decimal" />
               </div>
             </label>
-            <label className="field">Currency
-              <input className="input" value={account.currency} disabled title="An account's currency can't be changed" />
-            </label>
-            <label className="field full check-field">
-              <input type="checkbox" checked={hidden} onChange={e => setHidden(e.target.checked)} />
-              Hidden: left out of the Overview and new transactions, still counted in net worth
-            </label>
+            {isNew ? (
+              <div className="field full muted">Enter amounts you owe (cards, loans) as negative. The currency can't be changed later.</div>
+            ) : (
+              <label className="field full check-field">
+                <input type="checkbox" checked={hidden} onChange={e => setHidden(e.target.checked)} />
+                Hidden: left out of the Overview and new transactions, still counted in net worth
+              </label>
+            )}
           </div>
           {err && <div className="err">{err}</div>}
           {!online && <div className="err">You're offline. Changes can't be saved until you reconnect.</div>}
@@ -80,7 +100,7 @@ export function AccountModal({ account, onClose }: { account: Account; onClose: 
         <div className="sheet-foot">
           <div className="spacer" />
           <button type="button" className="btn" onClick={onClose}>Cancel</button>
-          <button className="btn-primary" disabled={save.isPending || !online}>Save</button>
+          <button className="btn-primary" disabled={busy || !online}>{isNew ? 'Add account' : 'Save'}</button>
         </div>
       </form>
     </div>

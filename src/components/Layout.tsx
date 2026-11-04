@@ -49,12 +49,15 @@ export function Layout({ onSignOut, email }: { onSignOut: () => void; email: str
     if (data) setModal({ draft: draftFromTxn(t, data.accounts), n: Date.now() });
   }, [data]);
   const closeModal = useCallback(() => setModal(null), []);
+  // A page can claim N for its own main action, such as New account on the Accounts page.
+  const newShortcut = useRef<(() => void) | null>(null);
+  const setNewShortcut = useCallback((fn: (() => void) | null) => { newShortcut.current = fn; }, []);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement).tagName?.toLowerCase();
       if (modal || ['input', 'select', 'textarea'].includes(tag) || e.metaKey || e.ctrlKey || e.altKey) return;
-      if ((e.key === 'n' || e.key === 'N') && online) { e.preventDefault(); openAdd(); }
+      if ((e.key === 'n' || e.key === 'N') && online) { e.preventDefault(); (newShortcut.current ?? openAdd)(); }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -80,7 +83,7 @@ export function Layout({ onSignOut, email }: { onSignOut: () => void; email: str
   const netWorth = sumBy(data.accounts, a => idx.toDisp(a.id, bal.get(a.id) ?? 0));
   const ctx: LedgerCtx = {
     data, idx, bal, netWorth, setDisp, ratesError: rates.isError && !rates.data, today, online, isMobile, theme, setTheme,
-    openAdd, openEdit, toast, signOut: onSignOut, email,
+    openAdd, setNewShortcut, openEdit, toast, signOut: onSignOut, email,
   };
 
   return (

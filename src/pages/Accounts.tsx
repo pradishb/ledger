@@ -1,12 +1,11 @@
-import { useState, type CSSProperties, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { useNavigate } from 'react-router';
 import { useLedger } from '../data/context';
 import { api, useLedgerMutation } from '../data/api';
-import { CURRENCY_CODES, DEFAULT_CURRENCY } from '../data/rates';
-import { CurrencySelect, DisplayCurrency, Header, Seg } from '../components/ui';
+import { DisplayCurrency, Header, Seg } from '../components/ui';
 import { AccountModal } from '../components/AccountModal';
 import { balColor, sumBy } from '../lib/ledger';
-import { errorMessage, fmt, parseMoney } from '../lib/format';
+import { errorMessage, fmt } from '../lib/format';
 import { ACCOUNT_TYPES, type Account, type AccountType } from '../lib/types';
 
 type SortKey = 'name' | 'type' | 'group' | 'cur' | 'bal';
@@ -17,24 +16,26 @@ const TYPE_LABEL = new Map(ACCOUNT_TYPES);
 const TYPE_ORDER = new Map(ACCOUNT_TYPES.map(([k], i) => [k, i]));
 
 export function Accounts() {
-  const { data, idx, bal, online, toast } = useLedger();
+  const { data, idx, bal, online, toast, setNewShortcut } = useLedger();
   const navigate = useNavigate();
-  const add = useLedgerMutation(api.addAccount);
   const setHidden = useLedgerMutation(api.setAccountHidden);
   const bulk = useLedgerMutation(api.updateAccounts);
   const [picked, setPicked] = useState<Set<number>>(new Set());
-  const [editing, setEditing] = useState<Account | null>(null);
+  // The account being edited, or 'new' while adding one.
+  const [editing, setEditing] = useState<Account | 'new' | null>(null);
+
+  // N opens New account here instead of New transaction (but not over an open dialog).
+  const editingRef = useRef(editing);
+  editingRef.current = editing;
+  useEffect(() => {
+    setNewShortcut(() => { if (!editingRef.current) setEditing('new'); });
+    return () => setNewShortcut(null);
+  }, [setNewShortcut]);
   const [prefs, setPrefs] = usePrefs();
   const [q, setQ] = useState('');
-  const [name, setName] = useState('');
-  const [type, setType] = useState<AccountType>('bank');
-  const [group, setGroup] = useState('');
-  const [opening, setOpening] = useState('');
-  const [currency, setCurrency] = useState(DEFAULT_CURRENCY);
 
   const used = data.accounts.map(a => a.currency);
   const usedCurs = [...new Set(used)].sort();
-  const groupNames = [...new Set(data.accounts.map(a => a.group).filter(Boolean))].sort((x, y) => x.localeCompare(y));
   const usedTypes = ACCOUNT_TYPES.filter(([k]) => data.accounts.some(a => a.type === k));
   const hiddenCount = data.accounts.filter(a => a.hidden).length;
   const disp = (id: number) => idx.convert(bal.get(id) ?? 0, idx.accCur(id), idx.disp);
@@ -107,40 +108,14 @@ export function Accounts() {
     </th>
   );
 
-  async function submit(e: FormEvent) {
-    e.preventDefault();
-    if (!name.trim()) return;
-    const cents = opening.trim() ? parseMoney(opening) : 0;
-    if (!Number.isFinite(cents)) return toast('Opening balance must be a number');
-    try {
-      await add.mutateAsync({ name: name.trim(), type, group: group.trim(), opening: cents, currency });
-      toast(`Added “${name.trim()}”`);
-      setName(''); setGroup(''); setOpening('');
-    } catch (err) {
-      toast(errorMessage(err));
-    }
-  }
-
   return (
     <>
-      <Header title="Accounts" subtitle={`${data.accounts.length} accounts${hiddenCount ? `, ${hiddenCount} hidden` : ''}`}>
+      <Header title="Accounts" subtitle={`${data.accounts.length} accounts${hiddenCount ? `, ${hiddenCount} hidden` : ''}`}
+        primary={<button type="button" className="btn-primary" onClick={() => setEditing('new')} disabled={!online}>New account<span className="kbd hide-m">N</span></button>}>
         <DisplayCurrency />
       </Header>
       <div className="content">
         <div className="panel" style={{ maxWidth: 1320 }}>
-          <form className="inline-form" onSubmit={submit}>
-            <input className="input" style={{ width: 180 }} placeholder="Account name" value={name} onChange={e => setName(e.target.value)} />
-            <select className="select" value={type} onChange={e => setType(e.target.value as AccountType)}>
-              {ACCOUNT_TYPES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
-            </select>
-            <input className="input" style={{ width: 180 }} placeholder="Group (optional)" value={group} onChange={e => setGroup(e.target.value)} list="account-groups" />
-            <datalist id="account-groups">{groupNames.map(g => <option key={g} value={g} />)}</datalist>
-            <CurrencySelect value={currency} onChange={setCurrency} used={used} all={CURRENCY_CODES} title="Account currency" />
-            <input className="input mono" style={{ width: 140, textAlign: 'right' }} placeholder="Opening balance" inputMode="decimal" value={opening} onChange={e => setOpening(e.target.value)} />
-            <button className="btn sm" disabled={!online || add.isPending || !name.trim()}>Add account</button>
-            <span className="muted" style={{ fontSize: 12 }}>Enter amounts you owe (cards, loans) as negative.</span>
-          </form>
-
           {sel.length > 0 && (
             <div className="bulk-bar" role="toolbar" aria-label="Bulk edit">
               <b>{sel.length} selected</b>
@@ -253,9 +228,9 @@ export function Accounts() {
               </tfoot>
             )}
           </table>
-          {!data.accounts.length && <div className="empty">No accounts yet. Add one above.</div>}
+          {!data.accounts.length && <div className="empty">No accounts yet. Use New account to add one.</div>}
           {data.accounts.length > 0 && !rows.length && <div className="empty">No accounts match these filters.</div>}
-          {editing && <AccountModal account={editing} onClose={() => setEditing(null)} />}
+          {editing && <AccountModal account={editing === 'new' ? undefined : editing} onClose={() => setEditing(null)} />}
         </div>
       </div>
     </>

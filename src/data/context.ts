@@ -17,6 +17,8 @@ export interface LedgerCtx {
   theme: Theme;
   setTheme: (t: Theme) => void;
   openAdd: () => void;
+  /** Let the current page take over the N shortcut (null gives it back to New transaction). */
+  setNewShortcut: (fn: (() => void) | null) => void;
   openEdit: (t: Txn) => void;
   toast: (msg: string) => void;
   signOut: () => void;

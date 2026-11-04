@@ -19,7 +19,8 @@ export function Seg<K extends string>({ options, value, onChange, className = ''
   );
 }
 
-export function Header({ title, subtitle, children }: { title: string; subtitle?: string; children?: ReactNode }) {
+/** Page header. `primary` replaces the usual New transaction button with the page's own main action. */
+export function Header({ title, subtitle, children, primary }: { title: string; subtitle?: string; children?: ReactNode; primary?: ReactNode }) {
   const { openAdd, online } = useLedger();
   return (
     <header className="hdr">
@@ -28,9 +29,11 @@ export function Header({ title, subtitle, children }: { title: string; subtitle?
         {subtitle && <span className="sub">{subtitle}</span>}
       </div>
       {children}
-      <button className="btn-primary hide-m" onClick={openAdd} disabled={!online}>
-        New transaction<span className="kbd">N</span>
-      </button>
+      {primary ?? (
+        <button className="btn-primary hide-m" onClick={openAdd} disabled={!online}>
+          New transaction<span className="kbd">N</span>
+        </button>
+      )}
     </header>
   );
 }
