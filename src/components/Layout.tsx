@@ -10,9 +10,9 @@ import { todayStr } from '../lib/dates';
 import { errorMessage } from '../lib/format';
 import type { Txn } from '../lib/types';
 import { blankDraft, draftFromTxn, TxnModal, type Draft } from './TxnModal';
-import { Seg } from './ui';
+import { Seg, UserRow } from './ui';
 
-export function Layout({ onSignOut }: { onSignOut: () => void }) {
+export function Layout({ onSignOut, email }: { onSignOut: () => void; email: string }) {
   const online = useOnline();
   const isMobile = useIsMobile();
   const query = useQuery({ queryKey: LEDGER_KEY, queryFn: fetchLedger });
@@ -78,7 +78,7 @@ export function Layout({ onSignOut }: { onSignOut: () => void }) {
   const netWorth = sumBy(data.accounts, a => idx.toDisp(a.id, bal.get(a.id) ?? 0));
   const ctx: LedgerCtx = {
     data, idx, bal, netWorth, setDisp, ratesError: rates.isError && !rates.data, today, online, isMobile, theme, setTheme,
-    openAdd, openEdit, toast, signOut: onSignOut,
+    openAdd, openEdit, toast, signOut: onSignOut, email,
   };
 
   return (
@@ -93,7 +93,7 @@ export function Layout({ onSignOut }: { onSignOut: () => void }) {
           </nav>
           <div className="side-foot">
             <Seg className="md bg" value={theme} onChange={setTheme} options={[['light', 'Light'], ['dark', 'Dark']] as const} />
-            <button className="textbtn" onClick={onSignOut}>Sign out</button>
+            <UserRow />
           </div>
         </aside>
 

@@ -163,3 +163,19 @@ export function RangePicker({ value, onChange }: { value: Range; onChange: (r: R
     </div>
   );
 }
+
+/** Who is signed in, with a sign-out button. */
+export function UserRow() {
+  const { email, signOut } = useLedger();
+  return (
+    <div className="user-row">
+      <span className="avatar" aria-hidden="true">{(email[0] ?? '?').toUpperCase()}</span>
+      <span className="user-email ell" title={email}>{email || 'Signed in'}</span>
+      <button type="button" className="icon-btn" onClick={() => confirm('Sign out of Ledger?') && signOut()} title="Sign out" aria-label="Sign out">
+        <svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M6 2.5H3.5a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1H6M10.5 11 13.5 8l-3-3M13.5 8H6" />
+        </svg>
+      </button>
+    </div>
+  );
+}

@@ -1,10 +1,10 @@
 import { Link } from 'react-router';
 import { useLedger } from '../data/context';
-import { Header, Seg } from '../components/ui';
+import { Header, Seg, UserRow } from '../components/ui';
 
 /** Phone-only overflow menu for the pages that don't fit in the tab bar. */
 export function More() {
-  const { theme, setTheme, signOut } = useLedger();
+  const { theme, setTheme } = useLedger();
   return (
     <>
       <Header title="More" />
@@ -18,7 +18,7 @@ export function More() {
             <span className="muted">Appearance</span>
             <Seg className="md" value={theme} onChange={setTheme} options={[['light', 'Light'], ['dark', 'Dark']] as const} />
           </div>
-          <button className="btn danger" onClick={signOut}>Sign out</button>
+          <div className="panel" style={{ padding: 6 }}><UserRow /></div>
         </div>
       </div>
     </>

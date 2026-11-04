@@ -20,6 +20,8 @@ export interface LedgerCtx {
   openEdit: (t: Txn) => void;
   toast: (msg: string) => void;
   signOut: () => void;
+  /** Signed-in user's email; empty when offline with an expired session. */
+  email: string;
 }
 
 export const LedgerContext = createContext<LedgerCtx | null>(null);

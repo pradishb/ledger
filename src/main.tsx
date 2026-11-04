@@ -55,7 +55,7 @@ function App() {
 
   return (
     <Routes>
-      <Route element={<Layout onSignOut={signOut} />}>
+      <Route element={<Layout onSignOut={signOut} email={session?.user.email ?? ''} />}>
         <Route index element={<Overview />} />
         <Route path="accounts" element={<Accounts />} />
         <Route path="accounts/:id" element={<Register />} />
