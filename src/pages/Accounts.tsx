@@ -19,7 +19,8 @@ interface Prefs { sort: SortingState; type: AccountType | ''; cur: string; show:
 const DEFAULT_PREFS: Prefs = { sort: [{ id: 'type', desc: false }], type: '', cur: '', show: 'visible' };
 const TYPE_LABEL = new Map(ACCOUNT_TYPES);
 const TYPE_ORDER = new Map(ACCOUNT_TYPES.map(([k], i) => [k, i]));
-const text = (x: string, y: string) => x.localeCompare(y, undefined, { sensitivity: 'base', numeric: true });
+// One shared collator: localeCompare with options builds a new one on every comparison.
+const text = new Intl.Collator(undefined, { sensitivity: 'base', numeric: true }).compare;
 
 export function Accounts() {
   const { data, idx, bal, online, toast, setNewShortcut } = useLedger();

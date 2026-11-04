@@ -52,10 +52,12 @@ const payees: Payee[] = ['Bhatbhateni', 'Salesberry', 'Himalayan Java', 'Nepal O
 const txns: Txn[] = [];
 const day = (n: number) => { const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().slice(0, 10); };
 let id = 1;
-for (let n = 400; n >= 0; n--) {
+// ?big makes about 6,000 transactions, like a real multi-year ledger, for checking speed.
+const DAYS = q.has('big') ? 2900 : 400;
+for (let n = DAYS; n >= 0; n--) {
   if (n % 30 === 3) txns.push({ id: id++, date: day(n), acc: 1, xfer: 0, amount: 18500000, xamt: null, pay: 'Bank transfer', info: '', payee: 6, cat: 7, memo: 'Monthly salary', tags: [], splits: null });
   if (n % 30 === 10) txns.push({ id: id++, date: day(n), acc: 4, xfer: 0, amount: 458300, xamt: null, pay: 'None', info: '', payee: 0, cat: 8, memo: '', tags: [], splits: null });
-  const k = Math.floor(rnd() * 3);
+  const k = Math.floor(rnd() * 3) + (q.has('big') ? 1 : 0);
   for (let j = 0; j < k; j++) {
     const cat = pick([1, 1, 2, 2, 3, 4, 5, 6, 9]);
     const acc = pick([1, 1, 3, 7]);

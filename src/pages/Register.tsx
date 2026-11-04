@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { ColumnDef, RowSelectionState } from '@tanstack/react-table';
 import { useSearchParams } from 'react-router';
 import { useLedger } from '../data/context';
@@ -12,6 +12,10 @@ import { amountFor, balColor, describeTxn, sortTxnsAsc } from '../lib/ledger';
 import { fdate, REG_RANGES, regFrom, type RegRange } from '../lib/dates';
 import { errorMessage, fmt } from '../lib/format';
 import { ACCOUNT_TYPES, PAYMENTS, type Txn } from '../lib/types';
+
+const tagText = (t: Txn) => t.tags.map(x => '#' + x).join(' ');
+// One shared collator: localeCompare with options builds a new one on every comparison.
+const text = new Intl.Collator(undefined, { sensitivity: 'base' }).compare;
 
 export function Register() {
   // Filters live in the URL (/transactions?account=12&category=3), so links and Back work.
@@ -35,8 +39,87 @@ export function Register() {
   const delM = useLedgerMutation(api.deleteTxns);
   const busy = upd.isPending || tagM.isPending || delM.isPending;
   const acct = A > 0 ? idx.accMap.get(A) : undefined;
+  const needle = q.trim().toLowerCase();
+  // One account: its own currency. Every account: rows in their own currency, totals in the display currency.
+  const acur = acct ? idx.accCur(acct.id) : idx.disp;
 
-  if (A && !acct) {
+  // The filtered rows, their totals and the table's columns. Worked out only when the data or a
+  // filter changes, not on every render (ticking a checkbox, opening a menu), since a ledger can
+  // have thousands of transactions.
+  const view = useMemo(() => {
+    if (A && !acct) return null;
+    // A category matches itself and its subcategories, on the transaction or any split line.
+    const cats = C ? new Set([C, ...idx.subsOf(C).map(c => c.id)]) : null;
+    const kindOf = (t: Txn) => (t.xfer ? 'xfer' : t.amount < 0 ? 'exp' : 'inc');
+    const list = data.txns.filter(t => !A || t.acc === A || t.xfer === A).sort(sortTxnsAsc);
+    const from = regFrom(range, today);
+    let run = acct?.opening ?? 0;
+    let tin = 0, tout = 0;
+    const rows: { t: Txn; amt: number; run: number }[] = [];
+
+    for (const t of list) {
+      const amt = A ? amountFor(t, A) : t.amount;
+      run += amt;
+      if (t.date < from) continue;
+      if (K && kindOf(t) !== K) continue;
+      if (P >= 0 && (t.xfer || t.payee !== P)) continue;
+      if (cats && !(cats.has(t.cat) || t.splits?.some(s => cats.has(s.cat)))) continue;
+      if (needle) {
+        const hay = [
+          idx.payMap.get(t.payee)?.name, t.memo, t.info, idx.catLabel(t.cat),
+          ...(t.splits ?? []).map(s => `${idx.catLabel(s.cat)} ${s.memo}`),
+          t.tags.join(' '), (Math.abs(t.amount) / 100).toFixed(2),
+          t.xfer ? `transfer ${idx.accMap.get(t.xfer)?.name} ${idx.accMap.get(t.acc)?.name}` : '',
+        ].join(' ').toLowerCase();
+        if (!hay.includes(needle)) continue;
+      }
+      // One account: its own currency. Every account: converted to the home currency.
+      if (!(t.xfer && !A)) { const v = A ? amt : idx.toDisp(t.acc, amt); if (v > 0) tin += v; else tout += v; }
+      rows.push({ t, amt, run });
+    }
+    rows.reverse();
+
+    const rowCur = (t: Txn) => (A ? acur : idx.accCur(t.acc));
+    // Size the money columns to their longest value (mono 12px is 7.2px a character), so big
+    // amounts never spill into the next column. Padding: 8px left plus up to 14px right (the
+    // last column), with a little to spare.
+    const monoW = (n: number, pad: number, min: number) => Math.max(min, Math.ceil(n * 7.2) + pad);
+    let amtLen = 0, runLen = 0;
+    for (const r of rows) {
+      amtLen = Math.max(amtLen, fmt(r.amt, rowCur(r.t)).length);
+      if (A) runLen = Math.max(runLen, fmt(r.run, acur).length);
+    }
+    const amtW = monoW(amtLen, 30, 104);
+    const lastW = A ? monoW(runLen, 30, 112) : 112;
+
+    type Row = (typeof rows)[number] & { v: ReturnType<typeof describeTxn> };
+    const tableRows: Row[] = rows.map(r => ({ ...r, v: describeTxn(r.t, r.amt, A, idx) }));
+    const byDate = (x: Row, y: Row) => (x.t.date < y.t.date ? -1 : x.t.date > y.t.date ? 1 : x.t.id - y.t.id);
+
+    // One account shows its running balance; every account shows which account each row is in.
+    // Rows start newest first; a header click sorts, a third click goes back to that order.
+    const columns: ColumnDef<Row, unknown>[] = [
+      { id: 'date', header: 'Date', size: 90, accessorFn: r => r.t.date, sortingFn: (a, b) => byDate(a.original, b.original),
+        meta: { cellClass: 'text-xs text-ink2' }, cell: ({ row }) => fdate(row.original.t.date, today) },
+      { id: 'payment', header: 'Payment', size: 120, meta: { cellClass: 'text-xs text-muted-foreground' },
+        accessorFn: r => [r.t.pay === 'None' ? '' : r.t.pay, r.t.info ? '#' + r.t.info : ''].filter(Boolean).join(' ') },
+      { id: 'payee', header: 'Payee', accessorFn: r => r.v.payee, meta: { flex: true }, sortingFn: (a, b) => text(a.original.v.payee, b.original.v.payee) },
+      { id: 'category', header: 'Category', accessorFn: r => r.v.category, sortingFn: (a, b) => text(a.original.v.category, b.original.v.category),
+        meta: { flex: true, cellClass: 'text-xs', cellStyle: r => ({ color: r.v.catColor }) } },
+      { id: 'memo', header: 'Memo', accessorFn: r => r.t.memo, meta: { flex: true, cellClass: 'text-xs text-ink2' } },
+      ...(A ? [] : [{ id: 'account', header: 'Account', size: 120, accessorFn: (r: Row) => idx.accMap.get(r.t.acc)?.name ?? '',
+        meta: { cellClass: 'text-xs text-muted-foreground' } } satisfies ColumnDef<Row, unknown>]),
+      { id: 'tags', header: 'Tags', size: 110, accessorFn: r => tagText(r.t), enableSorting: false, meta: { cellClass: 'text-xs text-muted-foreground' } },
+      { id: 'amount', header: 'Amount', size: amtW, sortDescFirst: true, accessorFn: r => (A ? r.amt : idx.toDisp(r.t.acc, r.amt)),
+        meta: { align: 'right', cellClass: 'num', cellStyle: r => ({ color: r.v.amtColor }) }, cell: ({ row }) => fmt(row.original.amt, rowCur(row.original.t)) },
+      ...(A ? [{ id: 'balance', header: 'Balance', size: lastW, enableSorting: false,
+        meta: { align: 'right' as const, cellClass: 'num', cellStyle: (r: Row) => ({ color: balColor(r.run) }) },
+        cell: ({ row }: { row: { original: Row } }) => fmt(row.original.run, acur) } satisfies ColumnDef<Row, unknown>] : []),
+    ];
+    return { rows, tableRows, columns, tin, tout, rowCur };
+  }, [data, idx, A, acct, acur, C, K, P, range, today, needle]);
+
+  if (!view) {
     return (
       <>
         <Header title="Account not found" />
@@ -44,39 +127,7 @@ export function Register() {
       </>
     );
   }
-
-  // A category matches itself and its subcategories, on the transaction or any split line.
-  const cats = C ? new Set([C, ...idx.subsOf(C).map(c => c.id)]) : null;
-  const kindOf = (t: Txn) => (t.xfer ? 'xfer' : t.amount < 0 ? 'exp' : 'inc');
-
-  const list = data.txns.filter(t => !A || t.acc === A || t.xfer === A).sort(sortTxnsAsc);
-  const from = regFrom(range, today);
-  const needle = q.trim().toLowerCase();
-  let run = acct?.opening ?? 0;
-  let tin = 0, tout = 0;
-  const rows: { t: Txn; amt: number; run: number }[] = [];
-
-  for (const t of list) {
-    const amt = A ? amountFor(t, A) : t.amount;
-    run += amt;
-    if (t.date < from) continue;
-    if (K && kindOf(t) !== K) continue;
-    if (P >= 0 && (t.xfer || t.payee !== P)) continue;
-    if (cats && !(cats.has(t.cat) || t.splits?.some(s => cats.has(s.cat)))) continue;
-    if (needle) {
-      const hay = [
-        idx.payMap.get(t.payee)?.name, t.memo, t.info, idx.catLabel(t.cat),
-        ...(t.splits ?? []).map(s => `${idx.catLabel(s.cat)} ${s.memo}`),
-        t.tags.join(' '), (Math.abs(t.amount) / 100).toFixed(2),
-        t.xfer ? `transfer ${idx.accMap.get(t.xfer)?.name} ${idx.accMap.get(t.acc)?.name}` : '',
-      ].join(' ').toLowerCase();
-      if (!hay.includes(needle)) continue;
-    }
-    // One account: its own currency. Every account: converted to the home currency.
-    if (!(t.xfer && !A)) { const v = A ? amt : idx.toDisp(t.acc, amt); if (v > 0) tin += v; else tout += v; }
-    rows.push({ t, amt, run });
-  }
-  rows.reverse();
+  const { rows, tableRows, columns, tin, tout, rowCur } = view;
 
   const title = acct ? acct.name : 'Transactions';
   const subtitle = acct
@@ -86,42 +137,6 @@ export function Register() {
   const shownAccounts = data.accounts.filter(a => !a.hidden).sort((x, y) => x.name.localeCompare(y.name));
   const hiddenAccounts = data.accounts.filter(a => a.hidden).sort((x, y) => x.name.localeCompare(y.name));
   const b = acct ? bal.get(acct.id) : undefined;
-  // One account: its own currency. Every account: rows in their own currency, totals in the display currency.
-  const acur = acct ? idx.accCur(acct.id) : idx.disp;
-  const rowCur = (t: Txn) => (acct ? acur : idx.accCur(t.acc));
-  const tagText = (t: Txn) => t.tags.map(x => '#' + x).join(' ');
-  // Size the money columns to their longest value (mono 12px is 7.2px a character), so big
-  // amounts never spill into the next column.
-  const monoW = (n: number, pad: number, min: number) => Math.max(min, Math.ceil(n * 7.2) + pad);
-  // Padding: 8px left plus up to 14px right (the last column), with a little to spare.
-  const amtW = monoW(Math.max(0, ...rows.map(r => fmt(r.amt, rowCur(r.t)).length)), 30, 104);
-  const lastW = A ? monoW(Math.max(0, ...rows.map(r => fmt(r.run, acur).length)), 30, 112) : 112;
-
-  type Row = (typeof rows)[number] & { v: ReturnType<typeof describeTxn> };
-  const tableRows: Row[] = rows.map(r => ({ ...r, v: describeTxn(r.t, r.amt, A, idx) }));
-  const byDate = (x: Row, y: Row) => (x.t.date < y.t.date ? -1 : x.t.date > y.t.date ? 1 : x.t.id - y.t.id);
-  const text = (x: string, y: string) => x.localeCompare(y, undefined, { sensitivity: 'base' });
-
-  // One account shows its running balance; every account shows which account each row is in.
-  // Rows start newest first; a header click sorts, a third click goes back to that order.
-  const columns: ColumnDef<Row, unknown>[] = [
-    { id: 'date', header: 'Date', size: 90, accessorFn: r => r.t.date, sortingFn: (a, b) => byDate(a.original, b.original),
-      meta: { cellClass: 'text-xs text-ink2' }, cell: ({ row }) => fdate(row.original.t.date, today) },
-    { id: 'payment', header: 'Payment', size: 120, meta: { cellClass: 'text-xs text-muted-foreground' },
-      accessorFn: r => [r.t.pay === 'None' ? '' : r.t.pay, r.t.info ? '#' + r.t.info : ''].filter(Boolean).join(' ') },
-    { id: 'payee', header: 'Payee', accessorFn: r => r.v.payee, meta: { flex: true }, sortingFn: (a, b) => text(a.original.v.payee, b.original.v.payee) },
-    { id: 'category', header: 'Category', accessorFn: r => r.v.category, sortingFn: (a, b) => text(a.original.v.category, b.original.v.category),
-      meta: { flex: true, cellClass: 'text-xs', cellStyle: r => ({ color: r.v.catColor }) } },
-    { id: 'memo', header: 'Memo', accessorFn: r => r.t.memo, meta: { flex: true, cellClass: 'text-xs text-ink2' } },
-    ...(A ? [] : [{ id: 'account', header: 'Account', size: 120, accessorFn: (r: Row) => idx.accMap.get(r.t.acc)?.name ?? '',
-      meta: { cellClass: 'text-xs text-muted-foreground' } } satisfies ColumnDef<Row, unknown>]),
-    { id: 'tags', header: 'Tags', size: 110, accessorFn: r => tagText(r.t), enableSorting: false, meta: { cellClass: 'text-xs text-muted-foreground' } },
-    { id: 'amount', header: 'Amount', size: amtW, sortDescFirst: true, accessorFn: r => (A ? r.amt : idx.toDisp(r.t.acc, r.amt)),
-      meta: { align: 'right', cellClass: 'num', cellStyle: r => ({ color: r.v.amtColor }) }, cell: ({ row }) => fmt(row.original.amt, rowCur(row.original.t)) },
-    ...(A ? [{ id: 'balance', header: 'Balance', size: lastW, enableSorting: false,
-      meta: { align: 'right' as const, cellClass: 'num', cellStyle: (r: Row) => ({ color: balColor(r.run) }) },
-      cell: ({ row }: { row: { original: Row } }) => fmt(row.original.run, acur) } satisfies ColumnDef<Row, unknown>] : []),
-  ];
 
   // Selection. Only rows on screen count, so a search or range change never edits hidden rows.
   const sel = rows.filter(r => selection[r.t.id]).map(r => r.t);

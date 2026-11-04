@@ -2,7 +2,8 @@
 // TanStack holds the state (sorting, selection, column sizes, order and visibility); this file
 // renders it, adds drag-to-reorder and drag-to-resize on headers, and remembers column layout
 // per device.
-import { useEffect, useRef, useState, type CSSProperties, type DragEvent, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type DragEvent, type ReactNode } from 'react';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import {
   flexRender, getCoreRowModel, getSortedRowModel, useReactTable,
   type Column, type ColumnDef, type ColumnOrderState, type ColumnSizingState, type Header,
@@ -37,6 +38,20 @@ declare module '@tanstack/react-table' {
 }
 
 const SELECT = '_select';
+/** Longer lists only draw the rows on screen (plus a margin), like a desktop app's list. */
+const VIRTUAL_MIN = 80;
+const ROW_H = 33;
+
+/** The nearest ancestor that scrolls vertically: the page's content pane here. */
+function scrollParent(el: HTMLElement): HTMLElement {
+  for (let p = el.parentElement; p; p = p.parentElement) {
+    // shadcn's table wrapper only scrolls sideways (overflow-x makes overflow-y compute to auto too).
+    if (p.dataset.slot === 'table-container') continue;
+    const o = getComputedStyle(p).overflowY;
+    if (o === 'auto' || o === 'scroll') return p;
+  }
+  return document.scrollingElement as HTMLElement;
+}
 const FLEX_MIN = 140;
 const MIN_W = 48;
 
@@ -121,6 +136,35 @@ export function DataTable<T>(p: DataTableProps<T>) {
     saved.sizing[c.id] ?? (c.columnDef.meta?.flex ? undefined : c.getSize());
   const minWidth = leaf.reduce((t, c) => t + (c.columnDef.meta?.hideOnMobile ? 0 : widthOf(c) ?? FLEX_MIN), 0);
 
+  // Virtual rows. The page's content pane does the scrolling, so the virtualizer watches it and
+  // is told how far down it the table body starts (scrollMargin).
+  const bodyRef = useRef<HTMLTableSectionElement>(null);
+  const [scrollEl, setScrollEl] = useState<HTMLElement | null>(null);
+  const [margin, setMargin] = useState(0);
+  useLayoutEffect(() => {
+    const body = bodyRef.current;
+    if (!body) return;
+    const el = scrollEl ?? scrollParent(body);
+    if (el !== scrollEl) setScrollEl(el);
+    // Re-measured after every render: a bulk bar or a wrapping toolbar moves the body down.
+    const m = Math.round(body.getBoundingClientRect().top - el.getBoundingClientRect().top + el.scrollTop);
+    if (m !== margin) setMargin(m);
+  });
+  const virtual = rows.length > VIRTUAL_MIN && !!scrollEl;
+  const virt = useVirtualizer({
+    count: rows.length,
+    getScrollElement: () => scrollEl,
+    estimateSize: () => ROW_H,
+    overscan: 12,
+    scrollMargin: margin,
+    getItemKey: i => rows[i]?.id ?? i,
+    enabled: virtual,
+  });
+  const items = virtual ? virt.getVirtualItems() : null;
+  const shown = items ? items.map(i => rows[i.index]).filter(Boolean) : rows;
+  const padTop = items?.length ? items[0].start - margin : 0;
+  const padBottom = items?.length ? virt.getTotalSize() - (items[items.length - 1].end - margin) : 0;
+
   // Shift-click selects every row between the last one clicked and this one.
   const lastClicked = useRef<string | null>(null);
   function pick(rowId: string, shift: boolean) {
@@ -153,9 +197,11 @@ export function DataTable<T>(p: DataTableProps<T>) {
             </TableRow>
           ))}
         </TableHeader>
-        <TableBody>
-          {rows.map(r => (
+        <TableBody ref={bodyRef}>
+          {padTop > 0 && <tr aria-hidden="true" style={{ height: padTop }}><td colSpan={leaf.length} className="p-0" /></tr>}
+          {shown.map((r, k) => (
             <TableRow key={r.id} data-state={r.getIsSelected() ? 'selected' : undefined} title={p.rowTitle}
+              data-index={items ? items[k].index : undefined} ref={items ? virt.measureElement : undefined}
               className={cn(p.onRowClick && 'cursor-pointer', p.rowClassName?.(r.original))}
               onClick={() => p.onRowClick?.(r.original)}>
               {r.getVisibleCells().map(cell => {
@@ -177,6 +223,7 @@ export function DataTable<T>(p: DataTableProps<T>) {
               })}
             </TableRow>
           ))}
+          {padBottom > 0 && <tr aria-hidden="true" style={{ height: padBottom }}><td colSpan={leaf.length} className="p-0" /></tr>}
         </TableBody>
         {p.footer && <TableFooter>{p.footer(leaf.filter(c => c.id !== SELECT))}</TableFooter>}
       </Table>
@@ -260,13 +307,27 @@ function ResizeHandle<T>({ column, table }: { column: Column<T, unknown>; table:
       onPointerDown={e => {
         e.preventDefault(); e.stopPropagation();
         const el = e.currentTarget;
+        const th = el.parentElement as HTMLElement;
+        const tableEl = th.closest('table') as HTMLElement;
         // Start from the width on screen, which for a flexible column isn't its default size.
-        const start = (el.parentElement as HTMLElement).getBoundingClientRect().width;
+        const start = th.getBoundingClientRect().width;
+        const tableMin = tableEl.getBoundingClientRect().width;
         const x0 = e.clientX;
+        let w = start;
         el.setPointerCapture(e.pointerId);
-        const onMove = (ev: PointerEvent) =>
-          table.setColumnSizing(s => ({ ...s, [column.id]: Math.round(Math.max(MIN_W, start + ev.clientX - x0)) }));
-        const onUp = () => { el.removeEventListener('pointermove', onMove); el.removeEventListener('pointerup', onUp); el.removeEventListener('pointercancel', onUp); };
+        // While dragging, only the header cell's width changes. The table is fixed-layout, so the
+        // whole column follows without React re-rendering every row; state is set once, on release.
+        const onMove = (ev: PointerEvent) => {
+          w = Math.round(Math.max(MIN_W, start + ev.clientX - x0));
+          th.style.width = `${w}px`;
+          tableEl.style.minWidth = `${Math.max(0, tableMin + w - start)}px`;
+        };
+        const onUp = () => {
+          el.removeEventListener('pointermove', onMove);
+          el.removeEventListener('pointerup', onUp);
+          el.removeEventListener('pointercancel', onUp);
+          if (w !== start) table.setColumnSizing(s => ({ ...s, [column.id]: w }));
+        };
         el.addEventListener('pointermove', onMove);
         el.addEventListener('pointerup', onUp);
         el.addEventListener('pointercancel', onUp);
