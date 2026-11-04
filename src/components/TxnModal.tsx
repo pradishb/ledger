@@ -132,7 +132,8 @@ export function TxnModal({ initial, onClose }: { initial: Draft; onClose: () => 
   const split = !isX && d.split;
   const splitSum = d.splits.reduce((a, l) => a + centsOr0(l.amount), 0);
   const catOpts = catOptions(idx, d.type === 'xfer' ? null : d.type, '— Choose category —');
-  const accounts = data.accounts;
+  // Hidden accounts aren't offered, except one this transaction already uses.
+  const accounts = data.accounts.filter(a => !a.hidden || String(a.id) === initial.acc || String(a.id) === initial.xfer);
   const cur = idx.accCur(+d.acc);
   const cross = isCross(d, idx);
   const xcur = idx.accCur(+d.xfer);

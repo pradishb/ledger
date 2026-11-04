@@ -12,6 +12,8 @@ export interface Account {
   sort: number;
   /** ISO 4217 code; the account's amounts are in this currency. */
   currency: string;
+  /** Left out of the Overview and new-transaction pickers; still counted in totals. */
+  hidden: boolean;
 }
 
 export interface Category {

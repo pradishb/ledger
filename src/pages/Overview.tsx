@@ -118,7 +118,7 @@ export function Overview() {
               <div className="panel-body">
               <table className="tbl">
                 <tbody>
-                  {accountGroups(data.accounts, bal, idx).map(g => [
+                  {accountGroups(data.accounts.filter(a => !a.hidden), bal, idx).map(g => [
                     <tr className="group toggle" key={g.label} onClick={() => toggle(g.label)} aria-expanded={isOpen(g.label)}>
                       <td style={{ fontWeight: 600, color: 'var(--ink2)', fontSize: 11.5 }}>
                         <Chevron open={isOpen(g.label)} />{g.label} <span className="muted" style={{ fontWeight: 400 }}>· {g.accounts.length}</span>

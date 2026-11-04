@@ -1,28 +1,79 @@
-import { useState, type FormEvent } from 'react';
+import { useState, type CSSProperties, type FormEvent } from 'react';
 import { useNavigate } from 'react-router';
 import { useLedger } from '../data/context';
 import { api, useLedgerMutation } from '../data/api';
 import { CURRENCY_CODES, DEFAULT_CURRENCY } from '../data/rates';
-import { Chevron, CurrencySelect, DisplayCurrency, Header, useOpenGroups } from '../components/ui';
-import { accountGroups, balColor, sumBy } from '../lib/ledger';
+import { CurrencySelect, DisplayCurrency, Header, Seg } from '../components/ui';
+import { balColor, sumBy } from '../lib/ledger';
 import { errorMessage, fmt, parseMoney } from '../lib/format';
 import { ACCOUNT_TYPES, type AccountType } from '../lib/types';
+
+type SortKey = 'name' | 'type' | 'inst' | 'cur' | 'bal';
+type Show = 'visible' | 'hidden' | 'all';
+interface Prefs { sort: SortKey; desc: boolean; type: AccountType | ''; cur: string; show: Show }
+const DEFAULT_PREFS: Prefs = { sort: 'type', desc: false, type: '', cur: '', show: 'visible' };
+const TYPE_LABEL = new Map(ACCOUNT_TYPES);
+const TYPE_ORDER = new Map(ACCOUNT_TYPES.map(([k], i) => [k, i]));
 
 export function Accounts() {
   const { data, idx, bal, online, toast } = useLedger();
   const navigate = useNavigate();
   const add = useLedgerMutation(api.addAccount);
-  const setCur = useLedgerMutation(api.setAccountCurrency);
+  const setHidden = useLedgerMutation(api.setAccountHidden);
+  const [prefs, setPrefs] = usePrefs();
+  const [q, setQ] = useState('');
   const [name, setName] = useState('');
   const [type, setType] = useState<AccountType>('bank');
   const [inst, setInst] = useState('');
   const [opening, setOpening] = useState('');
   const [currency, setCurrency] = useState(DEFAULT_CURRENCY);
 
-  const groups = accountGroups(data.accounts, bal, idx);
-  const { isOpen, toggle } = useOpenGroups();
-  const total = sumBy(data.accounts, a => idx.toDisp(a.id, bal.get(a.id) ?? 0));
   const used = data.accounts.map(a => a.currency);
+  const usedCurs = [...new Set(used)].sort();
+  const usedTypes = ACCOUNT_TYPES.filter(([k]) => data.accounts.some(a => a.type === k));
+  const hiddenCount = data.accounts.filter(a => a.hidden).length;
+  const disp = (id: number) => idx.convert(bal.get(id) ?? 0, idx.accCur(id), idx.disp);
+
+  const needle = q.trim().toLowerCase();
+  const rows = data.accounts
+    .filter(a => prefs.show === 'all' || (prefs.show === 'hidden') === a.hidden)
+    .filter(a => !prefs.type || a.type === prefs.type)
+    .filter(a => !prefs.cur || a.currency === prefs.cur)
+    .filter(a => !needle || a.name.toLowerCase().includes(needle) || a.institution.toLowerCase().includes(needle));
+
+  const dir = prefs.desc ? -1 : 1;
+  const text = (x: string, y: string) => x.localeCompare(y, undefined, { sensitivity: 'base', numeric: true });
+  rows.sort((x, y) => {
+    let c = 0;
+    switch (prefs.sort) {
+      case 'name': c = text(x.name, y.name); break;
+      case 'type': c = (TYPE_ORDER.get(x.type) ?? 0) - (TYPE_ORDER.get(y.type) ?? 0); break;
+      case 'inst': c = text(x.institution, y.institution); break;
+      case 'cur': c = text(x.currency, y.currency); break;
+      case 'bal': {
+        // Accounts with no exchange rate can't be compared, so they go last either way.
+        const bx = disp(x.id), by = disp(y.id);
+        if (bx === null || by === null) return bx === by ? 0 : bx === null ? 1 : -1;
+        c = bx - by; break;
+      }
+    }
+    return c * dir || x.sort - y.sort || x.id - y.id;
+  });
+
+  const shownTotal = sumBy(rows, a => idx.toDisp(a.id, bal.get(a.id) ?? 0));
+  const netWorth = sumBy(data.accounts, a => idx.toDisp(a.id, bal.get(a.id) ?? 0));
+  const filtered = rows.length !== data.accounts.length;
+  const anyFilter = !!(needle || prefs.type || prefs.cur || prefs.show !== 'visible');
+
+  // A new column sorts A to Z, except balance, which starts largest first.
+  const sortBy = (k: SortKey) => setPrefs({ sort: k, desc: prefs.sort === k ? !prefs.desc : k === 'bal' });
+  const th = (k: SortKey, label: string, className = '', style?: CSSProperties) => (
+    <th className={`sortable ${className}`} style={style} aria-sort={prefs.sort === k ? (prefs.desc ? 'descending' : 'ascending') : 'none'}>
+      <button type="button" onClick={() => sortBy(k)}>
+        {label}<span className="sort-ind" aria-hidden="true">{prefs.sort === k ? (prefs.desc ? '↓' : '↑') : ''}</span>
+      </button>
+    </th>
+  );
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -40,7 +91,9 @@ export function Accounts() {
 
   return (
     <>
-      <Header title="Accounts" subtitle={`${data.accounts.length} accounts`}><DisplayCurrency /></Header>
+      <Header title="Accounts" subtitle={`${data.accounts.length} accounts${hiddenCount ? `, ${hiddenCount} hidden` : ''}`}>
+        <DisplayCurrency />
+      </Header>
       <div className="content">
         <div className="panel" style={{ maxWidth: 1320 }}>
           <form className="inline-form" onSubmit={submit}>
@@ -54,66 +107,118 @@ export function Accounts() {
             <button className="btn sm" disabled={!online || add.isPending || !name.trim()}>Add account</button>
             <span className="muted" style={{ fontSize: 12 }}>Enter amounts you owe (cards, loans) as negative.</span>
           </form>
+
+          <div className="filter-bar">
+            <input className="input search" type="search" placeholder="Search accounts" value={q} onChange={e => setQ(e.target.value)} aria-label="Search accounts" />
+            <select className="select" value={prefs.type} onChange={e => setPrefs({ type: e.target.value as AccountType | '' })} aria-label="Type">
+              <option value="">All types</option>
+              {usedTypes.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+            </select>
+            {usedCurs.length > 1 && (
+              <select className="select" value={prefs.cur} onChange={e => setPrefs({ cur: e.target.value })} aria-label="Currency">
+                <option value="">All currencies</option>
+                {usedCurs.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            )}
+            <Seg className="md" value={prefs.show} onChange={v => setPrefs({ show: v })}
+              options={[['visible', 'Visible'], ['hidden', `Hidden${hiddenCount ? ` · ${hiddenCount}` : ''}`], ['all', 'All']] as const} />
+            {anyFilter && (
+              <button type="button" className="link" onClick={() => { setQ(''); setPrefs({ type: '', cur: '', show: 'visible' }); }}>Clear filters</button>
+            )}
+            <span className="spacer" />
+            <span className="muted small">{filtered ? `${rows.length} of ${data.accounts.length}` : `${rows.length} accounts`}</span>
+          </div>
+
           <table className="tbl">
             <thead>
               <tr>
-                <th>Account</th>
-                <th className="hide-m">Institution</th>
-                <th className="hide-m" style={{ width: 90 }}>Currency</th>
-                <th className="r">Balance</th>
+                {th('name', 'Account')}
+                {th('type', 'Type', 'hide-m', { width: 120 })}
+                {th('inst', 'Institution', 'hide-m')}
+                {th('cur', 'Currency', 'hide-m', { width: 90 })}
+                {th('bal', 'Balance', 'r')}
+                <th style={{ width: 40 }} />
               </tr>
             </thead>
             <tbody>
-              {groups.map(g => [
-                <tr className="group toggle" key={g.label} onClick={() => toggle(g.label)} aria-expanded={isOpen(g.label)}>
-                  <td style={{ fontWeight: 600, color: 'var(--ink2)', fontSize: 11.5, paddingTop: 6, paddingBottom: 6 }}>
-                    <Chevron open={isOpen(g.label)} />{g.label} <span className="muted" style={{ fontWeight: 400 }}>· {g.accounts.length}</span>
-                  </td>
-                  <td className="hide-m" />
-                  <td className="hide-m" />
-                  <td className="num" style={{ fontWeight: 600, color: balColor(g.balance) }}>{fmt(g.balance, idx.disp)}</td>
-                </tr>,
-                ...(isOpen(g.label) ? g.accounts : []).map(a => {
-                  const b = bal.get(a.id) ?? 0;
-                  const conv = idx.convert(b, a.currency, idx.disp);
-                  return (
-                    <tr className="clickable" key={a.id} onClick={() => navigate(`/accounts/${a.id}`)}>
-                      <td style={{ paddingLeft: 28, paddingTop: 6, paddingBottom: 6 }}>{a.name}</td>
-                      <td className="small muted hide-m">{a.institution}</td>
-                      <td className="hide-m" onClick={e => e.stopPropagation()}>
-                        <CurrencySelect className="select sm" value={a.currency} used={used} all={CURRENCY_CODES}
-                          disabled={!online || setCur.isPending} title="The currency this account's amounts are in"
-                          onChange={c => {
-                            if (!confirm(`Change “${a.name}” to ${c}? Its amounts stay the same numbers, now read as ${c}.`)) return;
-                            setCur.mutate({ id: a.id, currency: c }, { onError: err => toast(errorMessage(err)) });
-                          }} />
-                      </td>
-                      <td className="num" style={{ color: balColor(b) }}>
-                        {fmt(b, a.currency)}
-                        {a.currency !== idx.disp && b !== 0 && (
-                          <div className="small muted">{conv === null ? 'No rate, not in totals' : `≈ ${fmt(conv, idx.disp)}`}</div>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                }),
-              ])}
-              {data.accounts.length > 0 && (
+              {rows.map(a => {
+                const b = bal.get(a.id) ?? 0;
+                const conv = idx.convert(b, a.currency, idx.disp);
+                return (
+                  <tr className={`clickable${a.hidden ? ' is-hidden' : ''}`} key={a.id} onClick={() => navigate(`/accounts/${a.id}`)}>
+                    <td>{a.name}{a.hidden && <span className="tag">Hidden</span>}</td>
+                    <td className="small hide-m">{TYPE_LABEL.get(a.type)}</td>
+                    <td className="small muted hide-m">{a.institution}</td>
+                    <td className="small mono hide-m">{a.currency}</td>
+                    <td className="num" style={{ color: balColor(b) }}>
+                      {fmt(b, a.currency)}
+                      {a.currency !== idx.disp && b !== 0 && (
+                        <div className="small muted">{conv === null ? 'No rate, not in totals' : `≈ ${fmt(conv, idx.disp)}`}</div>
+                      )}
+                    </td>
+                    <td className="r" onClick={e => e.stopPropagation()}>
+                      <button type="button" className="icon-btn eye" disabled={!online || setHidden.isPending}
+                        title={a.hidden ? 'Show this account' : 'Hide this account'} aria-label={a.hidden ? `Show ${a.name}` : `Hide ${a.name}`}
+                        onClick={() => setHidden.mutate({ id: a.id, hidden: !a.hidden }, {
+                          onSuccess: () => toast(a.hidden ? `Showing “${a.name}”` : `Hid “${a.name}”`),
+                          onError: err => toast(errorMessage(err)),
+                        })}>
+                        <EyeIcon off={a.hidden} />
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+            {data.accounts.length > 0 && (
+              <tfoot>
+                {filtered && (
+                  <tr className="group">
+                    <td style={{ fontWeight: 600 }}>Total shown</td>
+                    <td className="hide-m" /><td className="hide-m" /><td className="hide-m" />
+                    <td className="num" style={{ fontWeight: 600, color: balColor(shownTotal) }}>{fmt(shownTotal, idx.disp)}</td>
+                    <td />
+                  </tr>
+                )}
                 <tr className="group">
-                  <td style={{ fontWeight: 600, paddingTop: 6, paddingBottom: 6 }}>Net worth</td>
-                  <td className="hide-m" />
-                  <td className="hide-m" />
-                  <td className="num" style={{ fontWeight: 600, color: balColor(total) }}>
-                    {fmt(total, idx.disp)}
+                  <td style={{ fontWeight: 600 }}>Net worth <span className="muted small" style={{ fontWeight: 400 }}>· all accounts</span></td>
+                  <td className="hide-m" /><td className="hide-m" /><td className="hide-m" />
+                  <td className="num" style={{ fontWeight: 600, color: balColor(netWorth) }}>
+                    {fmt(netWorth, idx.disp)}
                     {idx.unrated.length > 0 && <div className="small muted">{idx.unrated.join(', ')} not included: no rate</div>}
                   </td>
+                  <td />
                 </tr>
-              )}
-            </tbody>
+              </tfoot>
+            )}
           </table>
           {!data.accounts.length && <div className="empty">No accounts yet. Add one above.</div>}
+          {data.accounts.length > 0 && !rows.length && <div className="empty">No accounts match these filters.</div>}
         </div>
       </div>
     </>
   );
 }
+
+const PREFS_KEY = 'ledger.accountsView';
+
+/** Sort and filters for the accounts table, remembered per device (the search box isn't). */
+function usePrefs() {
+  const [p, setP] = useState<Prefs>(() => {
+    try { return { ...DEFAULT_PREFS, ...JSON.parse(localStorage.getItem(PREFS_KEY) ?? '{}') }; } catch { return DEFAULT_PREFS; }
+  });
+  const set = (patch: Partial<Prefs>) => setP(prev => {
+    const next = { ...prev, ...patch };
+    try { localStorage.setItem(PREFS_KEY, JSON.stringify(next)); } catch { /* storage unavailable */ }
+    return next;
+  });
+  return [p, set] as const;
+}
+
+const EyeIcon = ({ off }: { off: boolean }) => (
+  <svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M1.5 8S4 3.5 8 3.5 14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8Z" />
+    <circle cx="8" cy="8" r="2" />
+    {off && <path d="M2.5 2.5l11 11" />}
+  </svg>
+);

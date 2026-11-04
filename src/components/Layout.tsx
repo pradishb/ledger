@@ -41,7 +41,9 @@ export function Layout({ onSignOut, email }: { onSignOut: () => void; email: str
   const openAdd = useCallback(() => {
     if (!data) return;
     if (!data.accounts.length) return toast('Add an account first');
-    setModal({ draft: blankDraft(data.accounts, today, {}, curAcc), n: Date.now() });
+    const shown = data.accounts.filter(a => !a.hidden || a.id === curAcc);
+    if (!shown.length) return toast('All accounts are hidden');
+    setModal({ draft: blankDraft(shown, today, {}, curAcc), n: Date.now() });
   }, [data, today, curAcc, toast]);
   const openEdit = useCallback((t: Txn) => {
     if (data) setModal({ draft: draftFromTxn(t, data.accounts), n: Date.now() });

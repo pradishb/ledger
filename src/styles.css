@@ -51,6 +51,19 @@ a { color: var(--acc); }
 .user-email { flex: 1; min-width: 0; font-size: 12px; color: var(--ink2); }
 .icon-btn { width: 28px; height: 28px; flex: none; display: grid; place-items: center; border: 0; border-radius: 6px; background: transparent; color: var(--ink3); }
 .icon-btn:hover { background: var(--hover); color: var(--neg); }
+.icon-btn.eye:hover { color: var(--ink); }
+.filter-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+.filter-bar .search { width: 220px; }
+.tbl th.sortable { padding: 0; }
+.tbl th.sortable button { display: flex; align-items: center; gap: 4px; width: 100%; padding: 7px 8px; border: 0; background: none; font: inherit; color: inherit; text-align: inherit; cursor: pointer; }
+.tbl th.sortable:first-child button { padding-left: 14px; }
+.tbl th.sortable.r button { justify-content: flex-end; }
+.tbl th.sortable button:hover { color: var(--ink); }
+.tbl th.sortable[aria-sort='ascending'] button, .tbl th.sortable[aria-sort='descending'] button { color: var(--ink); font-weight: 600; }
+.sort-ind { display: inline-block; width: 10px; font-size: 10px; }
+.tbl tfoot td { border-bottom: 0; border-top: 1px solid var(--line); }
+tr.is-hidden td { color: var(--ink3); }
+.tag { margin-left: 8px; padding: 1px 6px; border-radius: 4px; background: var(--sunk); border: 1px solid var(--line); font-size: 10.5px; color: var(--ink3); vertical-align: 1px; }
 
 .main { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
 .hdr { display: flex; align-items: center; gap: 16px; height: 52px; padding: 0 20px; border-bottom: 1px solid var(--line); background: var(--panel); flex: none; }
