@@ -273,6 +273,9 @@ input.input[type='date']::-webkit-date-and-time-value { text-align: left; margin
 .range.compact .range-btn { padding-right: 26px; gap: 6px; background-position: right 7px center; }
 .panel-tools .select.sm { width: auto; padding-right: 22px; }
 .panel-tools .select.sm { height: 26px; font-size: 12px; }
+/* Same 26px height as the compact range picker: 22px buttons + 1px padding + 1px border, each side. */
+.panel-tools .seg { padding: 1px; border-color: var(--line2); }
+.panel-tools .seg button { height: 22px; padding: 0 9px; }
 .chart-scroll { scrollbar-width: thin; scrollbar-color: var(--line2) transparent; }
 .chart-legend { padding: 8px 14px 0; }
 .dash3 .panel { overflow: visible; }

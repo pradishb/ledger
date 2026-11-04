@@ -77,7 +77,7 @@ const accounts = hbAccounts
   .sort((x, y) => (x.flags & 2) - (y.flags & 2) || +x.pos - +y.pos)
   .map((a, i) => ({
     k: +a.key, name: a.name.trim(), type: accountType(a),
-    inst: [groups.get(a.grp), a.flags & 2 ? 'Closed' : ''].filter(Boolean).join(' · '),
+    grp: groups.get(a.grp) ?? '', hidden: !!(a.flags & 2),
     open: cents(a.initial), sort: i, cur: curOf(a),
   }));
 
@@ -164,9 +164,9 @@ begin
   create temp table hb_acc (k int primary key, id bigint not null) on commit drop;
   create temp table hb_cat (k int primary key, id bigint not null) on commit drop;
 
-  for r in select * from jsonb_to_recordset(d->'accounts') as x(k int, name text, type text, inst text, open bigint, sort int, cur text) loop
-    insert into public.accounts (user_id, name, type, institution, opening_cents, sort, currency)
-    values (uid, r.name, r.type, r.inst, r.open, r.sort, r.cur) returning id into new_id;
+  for r in select * from jsonb_to_recordset(d->'accounts') as x(k int, name text, type text, grp text, hidden boolean, open bigint, sort int, cur text) loop
+    insert into public.accounts (user_id, name, type, group_name, hidden, opening_cents, sort, currency)
+    values (uid, r.name, r.type, r.grp, r.hidden, r.open, r.sort, r.cur) returning id into new_id;
     insert into hb_acc values (r.k, new_id);
   end loop;
 

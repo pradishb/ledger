@@ -82,22 +82,30 @@ export const sumType = (fl: Flow[], type: CatType, idx: Index) =>
 export const sumBy = <T>(list: T[], f: (x: T) => number) => list.reduce((a, x) => a + f(x), 0);
 
 export interface AccountGroup {
+  /** Unique across both ways of grouping, for remembering which groups are open. */
+  key: string;
   label: string;
   accounts: Account[];
   /** Group total in the display currency. */
   balance: number;
 }
 
-export function accountGroups(accounts: Account[], bal: Map<number, number>, idx: Index): AccountGroup[] {
-  return ACCOUNT_TYPES.flatMap(([type, label]) => {
-    const list = accounts.filter(a => a.type === type);
-    if (!list.length) return [];
-    return [{
-      label,
-      accounts: list,
-      balance: sumBy(list, a => idx.toDisp(a.id, bal.get(a.id) ?? 0)),
-    }];
-  });
+export type GroupBy = 'type' | 'group';
+
+/** Accounts grouped by type (in the fixed type order) or by their own group (A to Z, ungrouped last). */
+export function accountGroups(accounts: Account[], bal: Map<number, number>, idx: Index, by: GroupBy = 'type'): AccountGroup[] {
+  const make = (key: string, label: string, list: Account[]): AccountGroup =>
+    ({ key, label, accounts: list, balance: sumBy(list, a => idx.toDisp(a.id, bal.get(a.id) ?? 0)) });
+  if (by === 'type') {
+    return ACCOUNT_TYPES.flatMap(([type, label]) => {
+      const list = accounts.filter(a => a.type === type);
+      // Type keys stay the bare label, so groups opened before this option existed stay open.
+      return list.length ? [make(label, label, list)] : [];
+    });
+  }
+  const names = [...new Set(accounts.map(a => a.group))]
+    .sort((x, y) => (+!x - +!y) || x.localeCompare(y, undefined, { sensitivity: 'base', numeric: true }));
+  return names.map(n => make(`group:${n}`, n || 'No group', accounts.filter(a => a.group === n)));
 }
 
 export const balColor = (n: number) => (n < 0 ? 'var(--neg)' : 'var(--ink)');

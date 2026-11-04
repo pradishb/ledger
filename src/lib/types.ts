@@ -7,7 +7,8 @@ export interface Account {
   id: number;
   name: string;
   type: AccountType;
-  institution: string;
+  /** Free-form group, e.g. "Savings & FDs"; empty for none. */
+  group: string;
   opening: number;
   sort: number;
   /** ISO 4217 code; the account's amounts are in this currency. */

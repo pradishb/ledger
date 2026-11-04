@@ -65,7 +65,7 @@ export function Register() {
 
   const title = acct ? acct.name : 'All transactions';
   const subtitle = acct
-    ? [ACCOUNT_TYPES.find(x => x[0] === acct.type)?.[1], acct.institution].filter(Boolean).join(' · ')
+    ? [ACCOUNT_TYPES.find(x => x[0] === acct.type)?.[1], acct.group].filter(Boolean).join(' · ')
     : 'Every account';
   const b = acct ? bal.get(acct.id) : undefined;
   // One account: its own currency. Every account: rows in their own currency, totals in the display currency.

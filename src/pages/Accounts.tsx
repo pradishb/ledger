@@ -8,7 +8,7 @@ import { balColor, sumBy } from '../lib/ledger';
 import { errorMessage, fmt, parseMoney } from '../lib/format';
 import { ACCOUNT_TYPES, type AccountType } from '../lib/types';
 
-type SortKey = 'name' | 'type' | 'inst' | 'cur' | 'bal';
+type SortKey = 'name' | 'type' | 'group' | 'cur' | 'bal';
 type Show = 'visible' | 'hidden' | 'all';
 interface Prefs { sort: SortKey; desc: boolean; type: AccountType | ''; cur: string; show: Show }
 const DEFAULT_PREFS: Prefs = { sort: 'type', desc: false, type: '', cur: '', show: 'visible' };
@@ -26,12 +26,13 @@ export function Accounts() {
   const [q, setQ] = useState('');
   const [name, setName] = useState('');
   const [type, setType] = useState<AccountType>('bank');
-  const [inst, setInst] = useState('');
+  const [group, setGroup] = useState('');
   const [opening, setOpening] = useState('');
   const [currency, setCurrency] = useState(DEFAULT_CURRENCY);
 
   const used = data.accounts.map(a => a.currency);
   const usedCurs = [...new Set(used)].sort();
+  const groupNames = [...new Set(data.accounts.map(a => a.group).filter(Boolean))].sort((x, y) => x.localeCompare(y));
   const usedTypes = ACCOUNT_TYPES.filter(([k]) => data.accounts.some(a => a.type === k));
   const hiddenCount = data.accounts.filter(a => a.hidden).length;
   const disp = (id: number) => idx.convert(bal.get(id) ?? 0, idx.accCur(id), idx.disp);
@@ -41,7 +42,7 @@ export function Accounts() {
     .filter(a => prefs.show === 'all' || (prefs.show === 'hidden') === a.hidden)
     .filter(a => !prefs.type || a.type === prefs.type)
     .filter(a => !prefs.cur || a.currency === prefs.cur)
-    .filter(a => !needle || a.name.toLowerCase().includes(needle) || a.institution.toLowerCase().includes(needle));
+    .filter(a => !needle || a.name.toLowerCase().includes(needle) || a.group.toLowerCase().includes(needle));
 
   const dir = prefs.desc ? -1 : 1;
   const text = (x: string, y: string) => x.localeCompare(y, undefined, { sensitivity: 'base', numeric: true });
@@ -50,7 +51,8 @@ export function Accounts() {
     switch (prefs.sort) {
       case 'name': c = text(x.name, y.name); break;
       case 'type': c = (TYPE_ORDER.get(x.type) ?? 0) - (TYPE_ORDER.get(y.type) ?? 0); break;
-      case 'inst': c = text(x.institution, y.institution); break;
+      // Accounts with no group sort after those with one.
+      case 'group': c = (+!x.group - +!y.group) || text(x.group, y.group); break;
       case 'cur': c = text(x.currency, y.currency); break;
       case 'bal': {
         // Accounts with no exchange rate can't be compared, so they go last either way.
@@ -72,7 +74,7 @@ export function Accounts() {
   });
   const pickAll = () => setPicked(allPicked ? new Set() : new Set(rows.map(a => a.id)));
 
-  async function apply(patch: { hidden?: boolean; type?: AccountType; institution?: string }, done: string) {
+  async function apply(patch: { hidden?: boolean; type?: AccountType; group?: string }, done: string) {
     if (!sel.length) return;
     try {
       await bulk.mutateAsync({ ids: sel.map(a => a.id), patch });
@@ -82,10 +84,10 @@ export function Accounts() {
       toast(errorMessage(err));
     }
   }
-  function setInstitution() {
-    const shared = new Set(sel.map(a => a.institution));
-    const v = prompt(`Institution for ${sel.length} account${sel.length === 1 ? '' : 's'} (leave empty to clear):`, shared.size === 1 ? [...shared][0] : '');
-    if (v !== null) apply({ institution: v.trim() }, 'Updated');
+  function setGroupFor() {
+    const shared = new Set(sel.map(a => a.group));
+    const v = prompt(`Group for ${sel.length} account${sel.length === 1 ? '' : 's'} (leave empty to clear):`, shared.size === 1 ? [...shared][0] : '');
+    if (v !== null) apply({ group: v.trim() }, 'Updated');
   }
 
   const shownTotal = sumBy(rows, a => idx.toDisp(a.id, bal.get(a.id) ?? 0));
@@ -109,9 +111,9 @@ export function Accounts() {
     const cents = opening.trim() ? parseMoney(opening) : 0;
     if (!Number.isFinite(cents)) return toast('Opening balance must be a number');
     try {
-      await add.mutateAsync({ name: name.trim(), type, institution: inst.trim(), opening: cents, currency });
+      await add.mutateAsync({ name: name.trim(), type, group: group.trim(), opening: cents, currency });
       toast(`Added “${name.trim()}”`);
-      setName(''); setInst(''); setOpening('');
+      setName(''); setGroup(''); setOpening('');
     } catch (err) {
       toast(errorMessage(err));
     }
@@ -129,7 +131,8 @@ export function Accounts() {
             <select className="select" value={type} onChange={e => setType(e.target.value as AccountType)}>
               {ACCOUNT_TYPES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
             </select>
-            <input className="input" style={{ width: 180 }} placeholder="Institution (optional)" value={inst} onChange={e => setInst(e.target.value)} />
+            <input className="input" style={{ width: 180 }} placeholder="Group (optional)" value={group} onChange={e => setGroup(e.target.value)} list="account-groups" />
+            <datalist id="account-groups">{groupNames.map(g => <option key={g} value={g} />)}</datalist>
             <CurrencySelect value={currency} onChange={setCurrency} used={used} all={CURRENCY_CODES} title="Account currency" />
             <input className="input mono" style={{ width: 140, textAlign: 'right' }} placeholder="Opening balance" inputMode="decimal" value={opening} onChange={e => setOpening(e.target.value)} />
             <button className="btn sm" disabled={!online || add.isPending || !name.trim()}>Add account</button>
@@ -146,7 +149,7 @@ export function Accounts() {
                 <option value="">Change type…</option>
                 {ACCOUNT_TYPES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
               </select>
-              <button type="button" className="btn sm" disabled={!online || bulk.isPending} onClick={setInstitution}>Set institution…</button>
+              <button type="button" className="btn sm" disabled={!online || bulk.isPending} onClick={setGroupFor}>Set group…</button>
               <span className="spacer" />
               <button type="button" className="link" onClick={() => setPicked(new Set())}>Clear selection</button>
             </div>
@@ -182,7 +185,7 @@ export function Accounts() {
                 </th>
                 {th('name', 'Account')}
                 {th('type', 'Type', 'hide-m', { width: 120 })}
-                {th('inst', 'Institution', 'hide-m')}
+                {th('group', 'Group', 'hide-m')}
                 {th('cur', 'Currency', 'hide-m', { width: 90 })}
                 {th('bal', 'Balance', 'r')}
                 <th style={{ width: 40 }} />
@@ -199,7 +202,7 @@ export function Accounts() {
                     </td>
                     <td>{a.name}{a.hidden && <span className="tag">Hidden</span>}</td>
                     <td className="small hide-m">{TYPE_LABEL.get(a.type)}</td>
-                    <td className="small muted hide-m">{a.institution}</td>
+                    <td className="small muted hide-m">{a.group}</td>
                     <td className="small mono hide-m">{a.currency}</td>
                     <td className="num" style={{ color: balColor(b) }}>
                       {fmt(b, a.currency)}

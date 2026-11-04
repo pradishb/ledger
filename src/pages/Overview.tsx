@@ -2,9 +2,9 @@ import { useState, type CSSProperties } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { useLedger } from '../data/context';
 import { api, useLedgerMutation } from '../data/api';
-import { Bar, Chevron, DisplayCurrency, Dot, Header, Panel, RangePicker, useOpenGroups, useRange } from '../components/ui';
+import { Bar, Chevron, DisplayCurrency, Dot, Header, Panel, RangePicker, Seg, useOpenGroups, useRange } from '../components/ui';
 import { ChartIE, SizedBox } from '../components/Charts';
-import { accountGroups, balColor, flows, sumType } from '../lib/ledger';
+import { accountGroups, balColor, flows, sumType, type GroupBy } from '../lib/ledger';
 import { autoUnit, buckets, longDate, rangeDates, rangeName, unitFits, UNIT_NAME, UNITS, type Unit } from '../lib/dates';
 import { errorMessage, fmt, fmt0 } from '../lib/format';
 import { rankColor } from '../lib/types';
@@ -13,6 +13,7 @@ export function Overview() {
   const { data, idx, bal, today, netWorth, online, toast } = useLedger();
   const navigate = useNavigate();
   const { isOpen, toggle } = useOpenGroups();
+  const [groupBy, setGroupBy] = useGroupBy();
   const seed = useLedgerMutation(api.seedCategories);
 
   const [range, setRange] = useRange('overview', 'l30');
@@ -114,18 +115,22 @@ export function Overview() {
           </div>
 
           <div className="dash3">
-            <Panel title="Accounts" action={<Link className="link" to="/accounts">All accounts</Link>}>
+            <Panel title="Accounts" action={
+              <div className="panel-tools">
+                <Seg value={groupBy} onChange={setGroupBy} options={[['type', 'Type'], ['group', 'Group']] as const} />
+              </div>
+            }>
               <div className="panel-body">
               <table className="tbl">
                 <tbody>
-                  {accountGroups(data.accounts.filter(a => !a.hidden), bal, idx).map(g => [
-                    <tr className="group toggle" key={g.label} onClick={() => toggle(g.label)} aria-expanded={isOpen(g.label)}>
+                  {accountGroups(data.accounts.filter(a => !a.hidden), bal, idx, groupBy).map(g => [
+                    <tr className="group toggle" key={g.key} onClick={() => toggle(g.key)} aria-expanded={isOpen(g.key)}>
                       <td style={{ fontWeight: 600, color: 'var(--ink2)', fontSize: 11.5 }}>
-                        <Chevron open={isOpen(g.label)} />{g.label} <span className="muted" style={{ fontWeight: 400 }}>· {g.accounts.length}</span>
+                        <Chevron open={isOpen(g.key)} />{g.label} <span className="muted" style={{ fontWeight: 400 }}>· {g.accounts.length}</span>
                       </td>
                       <td className="num" style={{ fontWeight: 600, color: balColor(g.balance) }}>{fmt(g.balance, idx.disp)}</td>
                     </tr>,
-                    ...(isOpen(g.label) ? groupRows(g.accounts) : []),
+                    ...(isOpen(g.key) ? groupRows(g.accounts) : []),
                   ])}
                 </tbody>
               </table>
@@ -186,4 +191,18 @@ function useUnit() {
     try { localStorage.setItem(UNIT_KEY, v); } catch { /* storage unavailable */ }
   };
   return [u, set] as const;
+}
+
+const GROUP_BY_KEY = 'ledger.overview.groupBy';
+
+/** How the Overview groups accounts, remembered per device. */
+function useGroupBy() {
+  const [g, setG] = useState<GroupBy>(() => {
+    try { return localStorage.getItem(GROUP_BY_KEY) === 'group' ? 'group' : 'type'; } catch { return 'type'; }
+  });
+  const set = (v: GroupBy) => {
+    setG(v);
+    try { localStorage.setItem(GROUP_BY_KEY, v); } catch { /* storage unavailable */ }
+  };
+  return [g, set] as const;
 }
