@@ -7,7 +7,7 @@ import { applyTheme, initialTheme, useIsMobile, useOnline, type Theme } from '..
 import { useDisplayCurrency, useRates } from '../data/rates';
 import { balances, buildIndex, sumBy } from '../lib/ledger';
 import { todayStr } from '../lib/dates';
-import { errorMessage, fmt0 } from '../lib/format';
+import { errorMessage } from '../lib/format';
 import type { Txn } from '../lib/types';
 import { blankDraft, draftFromTxn, TxnModal, type Draft } from './TxnModal';
 import { Seg } from './ui';
@@ -88,24 +88,9 @@ export function Layout({ onSignOut }: { onSignOut: () => void }) {
           <div className="brand"><div className="logo">L</div>Ledger</div>
           <nav className="nav">
             {NAV.map(([to, label]) => (
-              <NavLink key={to} to={to} end className={({ isActive }) => `navbtn${isActive ? ' active' : ''}`}>{label}</NavLink>
+              <NavLink key={to} to={to} end={to === '/'} className={({ isActive }) => `navbtn${isActive ? ' active' : ''}`}>{label}</NavLink>
             ))}
           </nav>
-          <div className="side-head">
-            <span>Accounts</span>
-            <span className="mono">{fmt0(netWorth, idx.disp)}</span>
-          </div>
-          <div className="side-accts">
-            {data.accounts.map(a => {
-              const b = bal.get(a.id) ?? 0;
-              return (
-                <NavLink key={a.id} to={`/accounts/${a.id}`} className={({ isActive }) => `navbtn${isActive ? ' active' : ''}`}>
-                  <span className="ell">{a.name}</span>
-                  <span className="side-bal" style={{ color: b < 0 ? 'var(--neg)' : 'var(--ink2)' }}>{fmt0(b, idx.accCur(a.id))}</span>
-                </NavLink>
-              );
-            })}
-          </div>
           <div className="side-foot">
             <Seg className="md bg" value={theme} onChange={setTheme} options={[['light', 'Light'], ['dark', 'Dark']] as const} />
             <button className="textbtn" onClick={onSignOut}>Sign out</button>

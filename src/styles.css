@@ -45,12 +45,7 @@ a { color: var(--acc); }
 .navbtn { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; height: 28px; padding: 0 10px; border: 0; border-radius: 6px; background: transparent; color: var(--ink2); font-weight: 500; text-align: left; text-decoration: none; }
 .navbtn:hover { color: var(--ink); }
 .navbtn.active { background: var(--sel); color: var(--ink); font-weight: 600; }
-.side-accts .navbtn { font-weight: 400; }
-.side-accts .navbtn.active { font-weight: 600; }
-.side-head { display: flex; justify-content: space-between; align-items: baseline; padding: 18px 18px 6px; font-size: 11px; color: var(--ink3); font-weight: 500; }
-.side-accts { display: flex; flex-direction: column; gap: 1px; padding: 0 8px; overflow: auto; flex: 1; min-height: 0; }
-.side-bal { font-family: var(--mono); font-size: 11.5px; }
-.side-foot { display: flex; flex-direction: column; gap: 10px; padding: 12px; border-top: 1px solid var(--line); }
+.side-foot { margin-top: auto; display: flex; flex-direction: column; gap: 10px; padding: 12px; border-top: 1px solid var(--line); }
 .textbtn { align-self: flex-start; border: 0; background: none; padding: 0 4px; font-size: 11.5px; color: var(--ink3); white-space: nowrap; }
 .textbtn:hover { color: var(--ink); }
 
