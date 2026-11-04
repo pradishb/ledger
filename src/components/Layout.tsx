@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { NavLink, Outlet, useMatch } from 'react-router';
+import { NavLink, Outlet, useLocation } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { fetchLedger, LEDGER_KEY } from '../data/api';
 import { LedgerContext, type LedgerCtx } from '../data/context';
@@ -20,8 +20,9 @@ export function Layout({ onSignOut, email }: { onSignOut: () => void; email: str
   const [disp, setDisp] = useDisplayCurrency();
   const data = query.data;
   const today = todayStr();
-  const accMatch = useMatch('/accounts/:id');
-  const curAcc = accMatch ? Number(accMatch.params.id) || 0 : 0;
+  // The account being viewed on Transactions, so New transaction starts in it.
+  const loc = useLocation();
+  const curAcc = loc.pathname === '/transactions' ? Number(new URLSearchParams(loc.search).get('account')) || 0 : 0;
 
   const [theme, setThemeState] = useState<Theme>(initialTheme);
   const setTheme = useCallback((t: Theme) => { applyTheme(t); setThemeState(t); }, []);
@@ -125,14 +126,14 @@ export function Layout({ onSignOut, email }: { onSignOut: () => void; email: str
 }
 
 const NAV: [string, string][] = [
-  ['/', 'Overview'], ['/accounts', 'Accounts'], ['/transactions', 'All transactions'],
+  ['/', 'Overview'], ['/accounts', 'Accounts'], ['/transactions', 'Transactions'],
   ['/stats', 'Statistics'], ['/trend', 'Trend over time'], ['/categories', 'Categories & payees'],
 ];
 
 const TABS: [string, string, string][] = [
   ['/', 'Overview', 'M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z'],
   ['/accounts', 'Accounts', 'M3 10h18M5 10v8m4.7-8v8m4.6-8v8M19 10v8M3 21h18M12 3l9 5H3z'],
-  ['/transactions', 'Activity', 'M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01'],
+  ['/transactions', 'Transactions', 'M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01'],
   ['/stats', 'Stats', 'M12 3a9 9 0 1 0 9 9h-9z M15 3.5A9 9 0 0 1 20.5 9H15z'],
   ['/more', 'More', 'M5 12h.01M12 12h.01M19 12h.01'],
 ];

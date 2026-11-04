@@ -173,7 +173,7 @@ export function Accounts() {
                 const b = bal.get(a.id) ?? 0;
                 const conv = idx.convert(b, a.currency, idx.disp);
                 return (
-                  <tr className={`clickable${a.hidden ? ' is-hidden' : ''}${picked.has(a.id) ? ' picked' : ''}`} key={a.id} onClick={() => navigate(`/accounts/${a.id}`)}>
+                  <tr className={`clickable${a.hidden ? ' is-hidden' : ''}${picked.has(a.id) ? ' picked' : ''}`} key={a.id} onClick={() => navigate(`/transactions?account=${a.id}`)}>
                     <td className="pick" onClick={e => { e.stopPropagation(); togglePick(a.id); }}>
                       <input type="checkbox" checked={picked.has(a.id)} onChange={() => togglePick(a.id)} onClick={e => e.stopPropagation()} aria-label={`Select ${a.name}`} />
                     </td>

@@ -69,7 +69,7 @@ export function Overview() {
   const groupRows = (list: typeof data.accounts) => [...list].sort((x, y) => dispBal(y.id) - dispBal(x.id) || x.sort - y.sort).map(a => {
     const b = bal.get(a.id) ?? 0;
     return (
-      <tr className="clickable" key={a.id} onClick={() => navigate(`/accounts/${a.id}`)}>
+      <tr className="clickable" key={a.id} onClick={() => navigate(`/transactions?account=${a.id}`)}>
         <td style={{ paddingLeft: 28 }}>{a.name}</td>
         <td className="num" style={{ color: balColor(b) }}>{fmt(b, idx.accCur(a.id))}</td>
         <td />

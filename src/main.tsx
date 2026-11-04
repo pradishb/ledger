@@ -1,6 +1,6 @@
 import { StrictMode, useCallback } from 'react';
 import { createRoot } from 'react-dom/client';
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router';
+import { BrowserRouter, Navigate, Route, Routes, useParams } from 'react-router';
 import { QueryClient } from '@tanstack/react-query';
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
 import { createAsyncStoragePersister } from '@tanstack/query-async-storage-persister';
@@ -38,6 +38,12 @@ const persister = createAsyncStoragePersister({
 
 applyTheme(initialTheme());
 
+/** Old /accounts/:id links now open the Transactions page filtered to that account. */
+function AccountRedirect() {
+  const { id } = useParams();
+  return <Navigate to={`/transactions?account=${id}`} replace />;
+}
+
 function App() {
   const { session, loading } = useSession();
   const online = useOnline();
@@ -58,7 +64,7 @@ function App() {
       <Route element={<Layout onSignOut={signOut} email={session?.user.email ?? ''} />}>
         <Route index element={<Overview />} />
         <Route path="accounts" element={<Accounts />} />
-        <Route path="accounts/:id" element={<Register />} />
+        <Route path="accounts/:id" element={<AccountRedirect />} />
         <Route path="transactions" element={<Register />} />
         <Route path="stats" element={<Stats />} />
         <Route path="trend" element={<Trend />} />

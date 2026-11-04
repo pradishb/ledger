@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useParams } from 'react-router';
+import { useSearchParams } from 'react-router';
 import { useLedger } from '../data/context';
 import { api, useLedgerMutation } from '../data/api';
 import { Header } from '../components/ui';
@@ -10,8 +10,17 @@ import { errorMessage, fmt } from '../lib/format';
 import { ACCOUNT_TYPES, PAYMENTS, type Txn } from '../lib/types';
 
 export function Register() {
-  const params = useParams();
-  const A = params.id ? Number(params.id) || -1 : 0;
+  // Filters live in the URL (/transactions?account=12&category=3), so links and Back work.
+  const [params, setParams] = useSearchParams();
+  const A = params.has('account') ? Number(params.get('account')) || -1 : 0;
+  const C = Number(params.get('category')) || 0;
+  const P = params.has('payee') ? Number(params.get('payee')) || 0 : -1;
+  const K = (['exp', 'inc', 'xfer'] as const).find(k => k === params.get('kind')) ?? '';
+  const setParam = (key: string, v: string) => setParams(prev => {
+    const next = new URLSearchParams(prev);
+    if (v) next.set(key, v); else next.delete(key);
+    return next;
+  }, { replace: true });
   const { data, idx, bal, today, openEdit, isMobile, online, toast } = useLedger();
   const [q, setQ] = useState('');
   const [range, setRange] = useState<RegRange>('3m');
@@ -28,10 +37,14 @@ export function Register() {
     return (
       <>
         <Header title="Account not found" />
-        <div className="content"><div className="empty">This account doesn't exist.</div></div>
+        <div className="content"><div className="empty">This account doesn't exist. <button type="button" className="link" onClick={() => setParam('account', '')}>Show all transactions</button></div></div>
       </>
     );
   }
+
+  // A category matches itself and its subcategories, on the transaction or any split line.
+  const cats = C ? new Set([C, ...idx.subsOf(C).map(c => c.id)]) : null;
+  const kindOf = (t: Txn) => (t.xfer ? 'xfer' : t.amount < 0 ? 'exp' : 'inc');
 
   const list = data.txns.filter(t => !A || t.acc === A || t.xfer === A).sort(sortTxnsAsc);
   const from = regFrom(range, today);
@@ -44,6 +57,9 @@ export function Register() {
     const amt = A ? amountFor(t, A) : t.amount;
     run += amt;
     if (t.date < from) continue;
+    if (K && kindOf(t) !== K) continue;
+    if (P >= 0 && (t.xfer || t.payee !== P)) continue;
+    if (cats && !(cats.has(t.cat) || t.splits?.some(s => cats.has(s.cat)))) continue;
     if (needle) {
       const hay = [
         idx.payMap.get(t.payee)?.name, t.memo, t.info, idx.catLabel(t.cat),
@@ -59,10 +75,13 @@ export function Register() {
   }
   rows.reverse();
 
-  const title = acct ? acct.name : 'All transactions';
+  const title = acct ? acct.name : 'Transactions';
   const subtitle = acct
     ? [ACCOUNT_TYPES.find(x => x[0] === acct.type)?.[1], acct.group].filter(Boolean).join(' · ')
     : 'Every account';
+  const anyFilter = !!(A || C || P >= 0 || K || needle);
+  const shownAccounts = data.accounts.filter(a => !a.hidden).sort((x, y) => x.name.localeCompare(y.name));
+  const hiddenAccounts = data.accounts.filter(a => a.hidden).sort((x, y) => x.name.localeCompare(y.name));
   const b = acct ? bal.get(acct.id) : undefined;
   // One account: its own currency. Every account: rows in their own currency, totals in the display currency.
   const acur = acct ? idx.accCur(acct.id) : idx.disp;
@@ -145,10 +164,34 @@ export function Register() {
       <div className="content">
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           <div className="toolbar">
-            <input className="input" style={{ width: 280 }} value={q} onChange={e => setQ(e.target.value)} placeholder="Search payee, memo, category, amount" type="search" />
-            <select className="select" value={range} onChange={e => setRange(e.target.value as RegRange)}>
+            <input className="input" style={{ width: 240 }} value={q} onChange={e => setQ(e.target.value)} placeholder="Search payee, memo, category, amount" type="search" />
+            <select className="select" value={range} onChange={e => setRange(e.target.value as RegRange)} aria-label="Date range">
               {REG_RANGES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
             </select>
+            <select className="select" value={A > 0 ? A : ''} onChange={e => setParam('account', e.target.value)} aria-label="Account">
+              <option value="">All accounts</option>
+              {shownAccounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+              {hiddenAccounts.length > 0 && <optgroup label="Hidden">{hiddenAccounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</optgroup>}
+            </select>
+            <select className="select" value={K} onChange={e => setParam('kind', e.target.value)} aria-label="Type">
+              <option value="">All types</option>
+              <option value="exp">Expenses</option>
+              <option value="inc">Income</option>
+              <option value="xfer">Transfers</option>
+            </select>
+            <select className="select" value={C || ''} onChange={e => setParam('category', e.target.value)} aria-label="Category">
+              <option value="">All categories</option>
+              <optgroup label="Expense">{catOpts('exp')}</optgroup>
+              <optgroup label="Income">{catOpts('inc')}</optgroup>
+            </select>
+            <select className="select" value={P >= 0 ? P : ''} onChange={e => setParam('payee', e.target.value)} aria-label="Payee">
+              <option value="">All payees</option>
+              <option value="0">— No payee —</option>
+              {[...data.payees].sort((x, y) => x.name.localeCompare(y.name)).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+            {anyFilter && (
+              <button type="button" className="link" onClick={() => { setQ(''); setParams(new URLSearchParams(), { replace: true }); }}>Clear filters</button>
+            )}
             <div className="spacer" />
             {b !== undefined && (
               <span style={{ display: 'flex', gap: 6, alignItems: 'baseline', fontSize: 11.5, color: 'var(--ink3)' }}>
