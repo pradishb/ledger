@@ -4,9 +4,10 @@ import { useLedger } from '../data/context';
 import { api, useLedgerMutation } from '../data/api';
 import { CURRENCY_CODES, DEFAULT_CURRENCY } from '../data/rates';
 import { CurrencySelect, DisplayCurrency, Header, Seg } from '../components/ui';
+import { AccountModal } from '../components/AccountModal';
 import { balColor, sumBy } from '../lib/ledger';
 import { errorMessage, fmt, parseMoney } from '../lib/format';
-import { ACCOUNT_TYPES, type AccountType } from '../lib/types';
+import { ACCOUNT_TYPES, type Account, type AccountType } from '../lib/types';
 
 type SortKey = 'name' | 'type' | 'group' | 'cur' | 'bal';
 type Show = 'visible' | 'hidden' | 'all';
@@ -22,6 +23,7 @@ export function Accounts() {
   const setHidden = useLedgerMutation(api.setAccountHidden);
   const bulk = useLedgerMutation(api.updateAccounts);
   const [picked, setPicked] = useState<Set<number>>(new Set());
+  const [editing, setEditing] = useState<Account | null>(null);
   const [prefs, setPrefs] = usePrefs();
   const [q, setQ] = useState('');
   const [name, setName] = useState('');
@@ -188,7 +190,7 @@ export function Accounts() {
                 {th('group', 'Group', 'hide-m')}
                 {th('cur', 'Currency', 'hide-m', { width: 90 })}
                 {th('bal', 'Balance', 'r')}
-                <th style={{ width: 40 }} />
+                <th style={{ width: 72 }} />
               </tr>
             </thead>
             <tbody>
@@ -210,7 +212,10 @@ export function Accounts() {
                         <div className="small muted">{conv === null ? 'No rate, not in totals' : `≈ ${fmt(conv, idx.disp)}`}</div>
                       )}
                     </td>
-                    <td className="r" onClick={e => e.stopPropagation()}>
+                    <td className="r row-actions" onClick={e => e.stopPropagation()}>
+                      <button type="button" className="icon-btn" title="Edit this account" aria-label={`Edit ${a.name}`} onClick={() => setEditing(a)}>
+                        <PencilIcon />
+                      </button>
                       <button type="button" className="icon-btn eye" disabled={!online || setHidden.isPending}
                         title={a.hidden ? 'Show this account' : 'Hide this account'} aria-label={a.hidden ? `Show ${a.name}` : `Hide ${a.name}`}
                         onClick={() => setHidden.mutate({ id: a.id, hidden: !a.hidden }, {
@@ -250,6 +255,7 @@ export function Accounts() {
           </table>
           {!data.accounts.length && <div className="empty">No accounts yet. Add one above.</div>}
           {data.accounts.length > 0 && !rows.length && <div className="empty">No accounts match these filters.</div>}
+          {editing && <AccountModal account={editing} onClose={() => setEditing(null)} />}
         </div>
       </div>
     </>
@@ -276,5 +282,11 @@ const EyeIcon = ({ off }: { off: boolean }) => (
     <path d="M1.5 8S4 3.5 8 3.5 14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8Z" />
     <circle cx="8" cy="8" r="2" />
     {off && <path d="M2.5 2.5l11 11" />}
+  </svg>
+);
+
+const PencilIcon = () => (
+  <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M10.5 2.5l3 3L5.5 13.5H2.5v-3z" /><path d="M9 4l3 3" />
   </svg>
 );

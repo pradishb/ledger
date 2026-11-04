@@ -67,7 +67,7 @@ prints how many accounts are in each currency, and any account whose balance doe
 
 ## Not built yet
 
-- Editing or deleting accounts (only adding). For now use the Supabase table editor.
+- Deleting accounts. Hide them instead; editing works from the Accounts page.
 - Renaming categories and payees.
 - CSV import and bank sync.
 - Adding transactions while offline.

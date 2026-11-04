@@ -52,6 +52,11 @@ a { color: var(--acc); }
 .icon-btn { width: 28px; height: 28px; flex: none; display: grid; place-items: center; border: 0; border-radius: 6px; background: transparent; color: var(--ink3); }
 .icon-btn:hover { background: var(--hover); color: var(--neg); }
 .icon-btn.eye:hover { color: var(--ink); }
+.row-actions { white-space: nowrap; }
+.row-actions .icon-btn { display: inline-grid; vertical-align: middle; }
+.row-actions .icon-btn:hover { color: var(--ink); }
+.check-field { flex-direction: row; align-items: center; gap: 8px; font-size: 12.5px; color: var(--ink2); }
+.check-field input { margin: 0; accent-color: var(--acc); }
 .bulk-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 14px; background: var(--accSoft); border-bottom: 1px solid var(--line); font-size: 12.5px; }
 .tbl th.pick, .tbl td.pick { width: 34px; padding-right: 0; cursor: default; }
 .tbl th.pick + th.sortable button, .tbl td.pick + td { padding-left: 6px; }

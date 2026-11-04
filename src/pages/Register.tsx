@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'react-router';
 import { useLedger } from '../data/context';
 import { Header } from '../components/ui';
+import { AccountModal } from '../components/AccountModal';
 import { amountFor, balColor, describeTxn, sortTxnsAsc } from '../lib/ledger';
 import { fdate, REG_RANGES, regFrom, type RegRange } from '../lib/dates';
 import { fmt } from '../lib/format';
@@ -14,6 +15,7 @@ export function Register() {
   const [q, setQ] = useState('');
   const [range, setRange] = useState<RegRange>('3m');
   const [sel, setSel] = useState(0);
+  const [editing, setEditing] = useState(false);
   const acct = A > 0 ? idx.accMap.get(A) : undefined;
 
   useEffect(() => {
@@ -75,7 +77,10 @@ export function Register() {
 
   return (
     <>
-      <Header title={title} subtitle={subtitle} />
+      <Header title={title} subtitle={subtitle}>
+        {acct && <button type="button" className="btn sm" onClick={() => setEditing(true)}>Edit account</button>}
+      </Header>
+      {acct && editing && <AccountModal account={acct} onClose={() => setEditing(false)} />}
       <div className="content">
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           <div className="toolbar">

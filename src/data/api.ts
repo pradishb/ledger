@@ -92,6 +92,10 @@ export const api = {
     })),
   setAccountHidden: async ({ id, hidden }: { id: number; hidden: boolean }) =>
     void check(await supabase.from('accounts').update({ hidden }).eq('id', id)),
+  updateAccount: async (a: { id: number; name: string; type: AccountType; group: string; opening: number; hidden: boolean }) =>
+    void check(await supabase.from('accounts').update({
+      name: a.name, type: a.type, group_name: a.group, opening_cents: a.opening, hidden: a.hidden,
+    }).eq('id', a.id)),
   /** One change applied to several accounts at once. Currency is deliberately not editable. */
   updateAccounts: async ({ ids, patch }: { ids: number[]; patch: { hidden?: boolean; type?: AccountType; group?: string } }) => {
     const { group, ...rest } = patch;
