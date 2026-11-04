@@ -8,6 +8,9 @@ export interface LedgerCtx {
   idx: Index;
   bal: Map<number, number>;
   netWorth: number;
+  setDisp: (cur: string) => void;
+  /** Rates fetch state, for the "as of" note. */
+  ratesError: boolean;
   today: string;
   online: boolean;
   isMobile: boolean;

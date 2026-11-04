@@ -76,3 +76,38 @@ export const Chevron = ({ open }: { open: boolean }) => (
     <path d="M3 1.5 6.5 5 3 8.5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
   </svg>
 );
+
+/** Currency codes for a picker: the ones in use first, then every other code. */
+export function currencyOptions(used: string[], all: string[]) {
+  const first = [...new Set(used)].sort();
+  return { first, rest: all.filter(c => !first.includes(c)) };
+}
+
+export function CurrencySelect({ value, onChange, used, all, className = 'select', title, disabled }: {
+  value: string; onChange: (c: string) => void; used: string[]; all: string[];
+  className?: string; title?: string; disabled?: boolean;
+}) {
+  const { first, rest } = currencyOptions([...used, value], all);
+  return (
+    <select className={className} value={value} title={title} disabled={disabled} onChange={e => onChange(e.target.value)}>
+      <optgroup label="In use">{first.map(c => <option key={c} value={c}>{c}</option>)}</optgroup>
+      <optgroup label="All currencies">{rest.map(c => <option key={c} value={c}>{c}</option>)}</optgroup>
+    </select>
+  );
+}
+
+/** Picks the display currency for totals and reports, with the rates' date. */
+export function DisplayCurrency() {
+  const { data, idx, setDisp, ratesError } = useLedger();
+  const all = idx.rates ? Object.keys(idx.rates.perUsd).sort() : [];
+  const note = idx.rates ? `Rates ${shortDate(idx.rates.date)}` : ratesError ? 'Rates unavailable' : 'Loading rates…';
+  return (
+    <span className="disp-cur" title="Totals are converted to this currency at today's rates">
+      <CurrencySelect value={idx.disp} onChange={setDisp} used={data.accounts.map(a => a.currency)} all={all} />
+      <span className="muted small">{note}</span>
+    </span>
+  );
+}
+
+const shortDate = (s: string) =>
+  new Date(s + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' });

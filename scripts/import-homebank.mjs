@@ -1,16 +1,22 @@
 // Convert a HomeBank .xhb file into one SQL script for the Supabase SQL Editor.
 //
-//   node scripts/import-homebank.mjs <file.xhb> <out.sql>
+//   node scripts/import-homebank.mjs [--replace] <file.xhb> <out.sql>
 //
-// The SQL runs as a single transaction, imports into the only user in auth.users,
-// and refuses to run if that user already has accounts, categories, payees or
-// transactions. Single currency only: cross-currency transfers use the amount
-// on the paying side.
+// The SQL runs as a single transaction and imports into the only user in auth.users.
+// It refuses to run if that user already has data, unless --replace is given: then it
+// deletes the user's existing ledger first, in the same transaction, so a failed
+// import leaves the old data untouched.
+//
+// Currencies: each account gets its HomeBank currency and keeps its own amounts; transfers
+// between currencies keep both sides. HomeBank's exchange rates are not imported: the app
+// uses today's rates.
 import fs from 'node:fs';
 
-const [inFile, outFile] = process.argv.slice(2);
+const args = process.argv.slice(2);
+const replace = args.includes('--replace');
+const [inFile, outFile] = args.filter(a => a !== '--replace');
 if (!inFile || !outFile) {
-  console.error('Usage: node scripts/import-homebank.mjs <file.xhb> <out.sql>');
+  console.error('Usage: node scripts/import-homebank.mjs [--replace] <file.xhb> <out.sql>');
   process.exit(1);
 }
 
@@ -32,6 +38,15 @@ const hbAccounts = all('account');
 const hbCats = all('cat');
 const hbPayees = all('pay');
 const hbOps = all('ope');
+
+// --- Currencies: an account without its own currency is in HomeBank's base currency. ---
+const hbCurs = new Map(all('cur').map(c => [c.key, c]));
+const baseKey = all('properties')[0]?.curr;
+const curOf = a => {
+  const iso = hbCurs.get(a.curr || baseKey)?.iso;
+  if (!/^[A-Z]{3}$/.test(iso ?? '')) throw new Error(`No currency found for account "${a.name}"`);
+  return iso;
+};
 
 // HomeBank dates are day numbers where 1 = 0001-01-01.
 const toDate = n => {
@@ -63,7 +78,7 @@ const accounts = hbAccounts
   .map((a, i) => ({
     k: +a.key, name: a.name.trim(), type: accountType(a),
     inst: [groups.get(a.grp), a.flags & 2 ? 'Closed' : ''].filter(Boolean).join(' · '),
-    open: cents(a.initial), sort: i,
+    open: cents(a.initial), sort: i, cur: curOf(a),
   }));
 
 // --- Categories: HomeBank flag 2 = income; only two levels exist. ---
@@ -90,7 +105,7 @@ for (const [i, o] of hbOps.entries()) {
     (pairs.get(o.kxfer) ?? pairs.set(o.kxfer, []).get(o.kxfer)).push({ ...o, i });
     continue;
   }
-  txns.push({ i, d: toDate(o.date), a: +o.account, x: null, amt: cents(o.amount), p: payment(o), c: o.category ? +o.category : null, m: o.wording ?? '' });
+  txns.push({ i, d: toDate(o.date), a: +o.account, x: null, amt: cents(o.amount), xamt: null, p: payment(o), c: o.category ? +o.category : null, m: o.wording ?? '' });
 }
 for (const [k, sides] of pairs) {
   if (sides.length !== 2) throw new Error(`Transfer ${k} has ${sides.length} sides`);
@@ -100,9 +115,11 @@ for (const [k, sides] of pairs) {
   if (from.account === from.dst_account) { notes.selfXferSkipped++; continue; }
   if (from.category || to.category) notes.xferCatDropped++;
   if (from.date !== to.date) notes.xferDateDiffers++;
-  if (cents(from.amount) !== -cents(to.amount)) notes.crossCurrency++;
+  // Keep the receiving side's own amount whenever it differs (always, between currencies).
+  const xamt = cents(to.amount) !== -cents(from.amount) ? cents(to.amount) : null;
+  if (xamt !== null) notes.crossCurrency++;
   txns.push({
-    i: Math.min(from.i, to.i), d: toDate(from.date), a: +from.account, x: +from.dst_account, amt: cents(from.amount),
+    i: Math.min(from.i, to.i), d: toDate(from.date), a: +from.account, x: +from.dst_account, amt: cents(from.amount), xamt,
     p: from.paymode ? payment(from) : payment(to), c: null, m: from.wording || to.wording || '',
   });
 }
@@ -113,7 +130,7 @@ const data = {
   accounts,
   cats,
   payees,
-  txns: txns.map(t => [t.d, t.a, t.x, t.amt, t.p, t.c, t.m]),
+  txns: txns.map(t => [t.d, t.a, t.x, t.amt, t.p, t.c, t.m, t.xamt]),
 };
 const json = JSON.stringify(data);
 if (json.includes('$json$')) throw new Error('Data contains the SQL quote delimiter');
@@ -130,7 +147,14 @@ begin
   if n <> 1 then raise exception 'Expected exactly one user in auth.users, found %', n; end if;
   select id into uid from auth.users;
 
-  if exists (select 1 from public.accounts where user_id = uid)
+  ${replace ? `-- --replace: clear this user's ledger first (rolled back if the import fails).
+  delete from public.transactions where user_id = uid;
+  delete from public.payees where user_id = uid;
+  update public.categories set parent_id = null where user_id = uid;
+  delete from public.categories where user_id = uid;
+  delete from public.accounts where user_id = uid;
+
+  ` : ''}if exists (select 1 from public.accounts where user_id = uid)
      or exists (select 1 from public.categories where user_id = uid)
      or exists (select 1 from public.payees where user_id = uid)
      or exists (select 1 from public.transactions where user_id = uid) then
@@ -140,9 +164,9 @@ begin
   create temp table hb_acc (k int primary key, id bigint not null) on commit drop;
   create temp table hb_cat (k int primary key, id bigint not null) on commit drop;
 
-  for r in select * from jsonb_to_recordset(d->'accounts') as x(k int, name text, type text, inst text, open bigint, sort int) loop
-    insert into public.accounts (user_id, name, type, institution, opening_cents, sort)
-    values (uid, r.name, r.type, r.inst, r.open, r.sort) returning id into new_id;
+  for r in select * from jsonb_to_recordset(d->'accounts') as x(k int, name text, type text, inst text, open bigint, sort int, cur text) loop
+    insert into public.accounts (user_id, name, type, institution, opening_cents, sort, currency)
+    values (uid, r.name, r.type, r.inst, r.open, r.sort, r.cur) returning id into new_id;
     insert into hb_acc values (r.k, new_id);
   end loop;
 
@@ -157,8 +181,8 @@ begin
   insert into public.payees (user_id, name)
   select uid, x.name from jsonb_to_recordset(d->'payees') as x(name text);
 
-  insert into public.transactions (user_id, date, account_id, transfer_account_id, amount_cents, payment, category_id, memo)
-  select uid, (t.v->>0)::date, a.id, xa.id, (t.v->>3)::bigint, t.v->>4, c.id, t.v->>6
+  insert into public.transactions (user_id, date, account_id, transfer_account_id, amount_cents, payment, category_id, memo, transfer_amount_cents)
+  select uid, (t.v->>0)::date, a.id, xa.id, (t.v->>3)::bigint, t.v->>4, c.id, t.v->>6, (t.v->>7)::bigint
   from jsonb_array_elements(d->'txns') with ordinality as t(v, ord)
   join hb_acc a on a.k = (t.v->>1)::int
   left join hb_acc xa on xa.k = (t.v->>2)::int
@@ -186,7 +210,7 @@ for (const o of hbOps) hbBal.set(+o.account, (hbBal.get(+o.account) ?? 0) + cent
 const appBal = new Map();
 for (const t of txns) {
   appBal.set(t.a, (appBal.get(t.a) ?? 0) + t.amt);
-  if (t.x) appBal.set(t.x, (appBal.get(t.x) ?? 0) - t.amt);
+  if (t.x) appBal.set(t.x, (appBal.get(t.x) ?? 0) + (t.xamt ?? -t.amt));
 }
 const mismatched = accounts.filter(a => (hbBal.get(a.k) ?? 0) !== (appBal.get(a.k) ?? 0));
 
@@ -194,6 +218,9 @@ console.log(`Wrote ${outFile} (${(fs.statSync(outFile).size / 1024).toFixed(0)} 
 console.log(`${accounts.length} accounts, ${cats.length} categories, ${payees.length} payees, ${txns.length} transactions (${pairs.size} transfers)`);
 console.log('Transfers with a category (category dropped):', notes.xferCatDropped);
 console.log('Transfers whose two sides had different dates (paying side used):', notes.xferDateDiffers);
-console.log('Cross-currency transfers (paying side amount used):', notes.crossCurrency);
+console.log('Transfers with a different amount received (both kept):', notes.crossCurrency);
+const byCur = new Map();
+for (const a of accounts) byCur.set(a.cur, (byCur.get(a.cur) ?? 0) + 1);
+console.log('Accounts by currency:', [...byCur].map(([c, n]) => `${c} ${n}`).join(', '));
 console.log('Transfers into the same account (skipped, no balance effect):', notes.selfXferSkipped);
 for (const a of mismatched) console.log(`Balance differs from HomeBank: ${a.name} ${(hbBal.get(a.k) ?? 0) / 100} -> ${(appBal.get(a.k) ?? 0) / 100}`);

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'react-router';
 import { useLedger } from '../data/context';
 import { Header } from '../components/ui';
-import { balColor, describeTxn, sortTxnsAsc } from '../lib/ledger';
+import { amountFor, balColor, describeTxn, sortTxnsAsc } from '../lib/ledger';
 import { fdate, REG_RANGES, regFrom, type RegRange } from '../lib/dates';
 import { fmt } from '../lib/format';
 import { ACCOUNT_TYPES, type Txn } from '../lib/types';
@@ -45,7 +45,7 @@ export function Register() {
   const rows: { t: Txn; amt: number; run: number }[] = [];
 
   for (const t of list) {
-    const amt = !A || t.acc === A ? t.amount : -t.amount;
+    const amt = A ? amountFor(t, A) : t.amount;
     run += amt;
     if (t.date < from) continue;
     if (needle) {
@@ -57,7 +57,8 @@ export function Register() {
       ].join(' ').toLowerCase();
       if (!hay.includes(needle)) continue;
     }
-    if (!(t.xfer && !A)) { if (amt > 0) tin += amt; else tout += amt; }
+    // One account: its own currency. Every account: converted to the home currency.
+    if (!(t.xfer && !A)) { const v = A ? amt : idx.toDisp(t.acc, amt); if (v > 0) tin += v; else tout += v; }
     rows.push({ t, amt, run });
   }
   rows.reverse();
@@ -67,6 +68,9 @@ export function Register() {
     ? [ACCOUNT_TYPES.find(x => x[0] === acct.type)?.[1], acct.institution].filter(Boolean).join(' · ')
     : 'Every account';
   const b = acct ? bal.get(acct.id) : undefined;
+  // One account: its own currency. Every account: rows in their own currency, totals in the display currency.
+  const acur = acct ? idx.accCur(acct.id) : idx.disp;
+  const rowCur = (t: Txn) => (acct ? acur : idx.accCur(t.acc));
   const tagText = (t: Txn) => t.tags.map(x => '#' + x).join(' ');
 
   return (
@@ -82,7 +86,7 @@ export function Register() {
             <div className="spacer" />
             {b !== undefined && (
               <span style={{ display: 'flex', gap: 6, alignItems: 'baseline', fontSize: 11.5, color: 'var(--ink3)' }}>
-                Balance<span className="mono" style={{ fontSize: 12.5, color: balColor(b), fontWeight: 500 }}>{fmt(b)}</span>
+                Balance<span className="mono" style={{ fontSize: 12.5, color: balColor(b), fontWeight: 500 }}>{fmt(b, acur)}</span>
               </span>
             )}
           </div>
@@ -95,13 +99,13 @@ export function Register() {
                   return (
                     <div className="mrow" key={t.id} onClick={() => openEdit(t)} style={{ opacity: t.date > today ? 0.55 : 1 }}>
                       <div className="p">{v.payee}</div>
-                      <div className="a" style={{ color: v.amtColor }}>{fmt(amt)}</div>
+                      <div className="a" style={{ color: v.amtColor }}>{fmt(amt, rowCur(t))}</div>
                       <div className="m">
                         {fdate(t.date, today)} · <span style={{ color: v.catColor }}>{v.category}</span>
                         {!A && ` · ${idx.accMap.get(t.acc)?.name ?? ''}`}
                         {t.memo && ` · ${t.memo}`}
                       </div>
-                      <div className="b" style={{ color: A ? balColor(run) : 'var(--ink3)' }}>{A ? fmt(run) : tagText(t)}</div>
+                      <div className="b" style={{ color: A ? balColor(run) : 'var(--ink3)' }}>{A ? fmt(run, acur) : tagText(t)}</div>
                     </div>
                   );
                 })}
@@ -134,8 +138,8 @@ export function Register() {
                           <td className="small ell" style={{ color: v.catColor }}>{v.category}</td>
                           <td className="small ell" style={{ color: 'var(--ink2)' }}>{t.memo}</td>
                           <td className="small muted ell">{A ? tagText(t) : idx.accMap.get(t.acc)?.name}</td>
-                          <td className="num" style={{ color: v.amtColor }}>{fmt(amt)}</td>
-                          <td className="num" style={{ color: A ? balColor(run) : 'var(--ink3)' }}>{A ? fmt(run) : tagText(t)}</td>
+                          <td className="num" style={{ color: v.amtColor }}>{fmt(amt, rowCur(t))}</td>
+                          <td className="num" style={{ color: A ? balColor(run) : 'var(--ink3)' }}>{A ? fmt(run, acur) : tagText(t)}</td>
                         </tr>
                       );
                     })}
@@ -146,8 +150,8 @@ export function Register() {
             {!rows.length && <div className="empty">No transactions match these filters.</div>}
             <div className="foot">
               <span>{rows.length} transaction{rows.length === 1 ? '' : 's'}</span>
-              <span>In <span className="mono" style={{ color: 'var(--pos)' }}>{fmt(tin)}</span></span>
-              <span>Out <span className="mono" style={{ color: 'var(--ink)' }}>{fmt(tout)}</span></span>
+              <span>In <span className="mono" style={{ color: 'var(--pos)' }}>{fmt(tin, acur)}</span></span>
+              <span>Out <span className="mono" style={{ color: 'var(--ink)' }}>{fmt(tout, acur)}</span></span>
               <div className="spacer" />
               <span>{isMobile ? 'Tap a row to edit.' : 'Double-click a row to edit.'}</span>
             </div>

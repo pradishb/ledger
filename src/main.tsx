@@ -72,7 +72,7 @@ function App() {
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <PersistQueryClientProvider client={queryClient} persistOptions={{ persister, maxAge: MONTH, buster: 'v1' }}>
+    <PersistQueryClientProvider client={queryClient} persistOptions={{ persister, maxAge: MONTH, buster: 'v2' }}>
       <BrowserRouter>
         <App />
       </BrowserRouter>

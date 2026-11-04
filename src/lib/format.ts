@@ -1,21 +1,27 @@
-const CURRENCY = import.meta.env.VITE_CURRENCY || 'USD';
 export const LOCALE: string | undefined = import.meta.env.VITE_LOCALE || undefined;
 
-const money = new Intl.NumberFormat(LOCALE, { style: 'currency', currency: CURRENCY });
-const money0 = new Intl.NumberFormat(LOCALE, {
-  style: 'currency', currency: CURRENCY, minimumFractionDigits: 0, maximumFractionDigits: 0,
-});
-const moneyK = new Intl.NumberFormat(LOCALE, {
-  style: 'currency', currency: CURRENCY, notation: 'compact', maximumFractionDigits: 1,
-});
+type Style = 'full' | 'whole' | 'compact';
+const cache = new Map<string, Intl.NumberFormat>();
+function formatter(cur: string, style: Style) {
+  const key = `${cur}|${style}`;
+  let f = cache.get(key);
+  if (!f) {
+    const opts: Intl.NumberFormatOptions = { style: 'currency', currency: cur };
+    if (style === 'whole') Object.assign(opts, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+    if (style === 'compact') Object.assign(opts, { notation: 'compact', maximumFractionDigits: 1 });
+    try { f = new Intl.NumberFormat(LOCALE, opts); } catch { f = new Intl.NumberFormat(LOCALE, { ...opts, currency: 'XXX' }); }
+    cache.set(key, f);
+  }
+  return f;
+}
 
-// `|| 0` turns -0 into 0 so we never print "-$0.00".
-export const fmt = (cents: number) => money.format(cents / 100 || 0);
-export const fmt0 = (cents: number) => money0.format(Math.round(cents / 100) || 0);
-export const fmtK = (cents: number) => moneyK.format(cents / 100 || 0);
+// `|| 0` turns -0 into 0 so we never print "-$0.00". `cur` is an ISO currency code.
+export const fmt = (cents: number, cur: string) => formatter(cur, 'full').format(cents / 100 || 0);
+export const fmt0 = (cents: number, cur: string) => formatter(cur, 'whole').format(Math.round(cents / 100) || 0);
+export const fmtK = (cents: number, cur: string) => formatter(cur, 'compact').format(cents / 100 || 0);
 
-export const currencySymbol =
-  money.formatToParts(0).find(p => p.type === 'currency')?.value ?? '$';
+export const currencySymbol = (cur: string) =>
+  formatter(cur, 'full').formatToParts(0).find(p => p.type === 'currency')?.value ?? cur;
 
 /** Parse user input like "1,234.56", "$12" or "12,50" into cents. NaN if invalid. */
 export function parseMoney(input: string): number {

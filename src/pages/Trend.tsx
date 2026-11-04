@@ -18,9 +18,9 @@ export function Trend() {
 
   const N = Number(n);
   const months = monthsBack(N, today);
-  const mfl = months.map(m => flows(data.txns, m.from, m.to));
+  const mfl = months.map(m => flows(data.txns, m.from, m.to, idx));
   const T = (a: number[]) => a.reduce((x, y) => x + y, 0);
-  const cell = (c: number, color = 'var(--ink)'): Cell => ({ v: Math.abs(c) < 50 ? '–' : fmt0(c), color });
+  const cell = (c: number, color = 'var(--ink)'): Cell => ({ v: Math.abs(c) < 50 ? '–' : fmt0(c, idx.disp), color });
 
   let rows: Row[];
   let legend: { key: string; name: string; color: string; op: number; onClick?: () => void }[];
@@ -32,9 +32,9 @@ export function Trend() {
     chart = w => <ChartIE months={months.map((m, i) => ({ ...m, inc: inc[i], exp: exp[i] }))} w={w} h={220} />;
     legend = [{ key: 'i', name: 'Income', color: 'var(--acc)', op: 1 }, { key: 'e', name: 'Expenses', color: 'var(--exp)', op: 1 }];
     rows = [
-      { name: 'Income', color: 'var(--acc)', cells: inc.map(x => cell(x, 'var(--pos)')), total: fmt0(T(inc)), avg: fmt0(T(inc) / N), totColor: 'var(--pos)', weight: 400, op: 1 },
-      { name: 'Expenses', color: 'var(--exp)', cells: exp.map(x => cell(x)), total: fmt0(T(exp)), avg: fmt0(T(exp) / N), totColor: 'var(--ink)', weight: 400, op: 1 },
-      { name: 'Net', color: 'transparent', cells: net.map(x => cell(x, balColor(x))), total: fmt0(T(net)), avg: fmt0(T(net) / N), totColor: balColor(T(net)), weight: 600, op: 1 },
+      { name: 'Income', color: 'var(--acc)', cells: inc.map(x => cell(x, 'var(--pos)')), total: fmt0(T(inc), idx.disp), avg: fmt0(T(inc) / N, idx.disp), totColor: 'var(--pos)', weight: 400, op: 1 },
+      { name: 'Expenses', color: 'var(--exp)', cells: exp.map(x => cell(x)), total: fmt0(T(exp), idx.disp), avg: fmt0(T(exp) / N, idx.disp), totColor: 'var(--ink)', weight: 400, op: 1 },
+      { name: 'Net', color: 'transparent', cells: net.map(x => cell(x, balColor(x))), total: fmt0(T(net), idx.disp), avg: fmt0(T(net) / N, idx.disp), totColor: balColor(T(net)), weight: 600, op: 1 },
       {
         name: 'Savings rate', color: 'transparent',
         cells: net.map((x, i) => ({ v: inc[i] ? Math.round((x / inc[i]) * 100) + '%' : '–', color: 'var(--ink2)' })),
@@ -53,11 +53,11 @@ export function Trend() {
       onClick: () => setHidden(h => ({ ...h, [x.id]: !h[x.id] })),
     }));
     rows = series.map(x => ({
-      name: x.name, color: x.color, cells: x.values.map(y => cell(y)), total: fmt0(T(x.values)), avg: fmt0(T(x.values) / N),
+      name: x.name, color: x.color, cells: x.values.map(y => cell(y)), total: fmt0(T(x.values), idx.disp), avg: fmt0(T(x.values) / N, idx.disp),
       totColor: 'var(--ink)', weight: 400, op: hidden[x.id] ? 0.4 : 1,
     }));
     const tot = months.map((_, i) => shown.reduce((a, x) => a + x.values[i], 0));
-    rows.push({ name: 'Total shown', color: 'transparent', cells: tot.map(y => cell(y)), total: fmt0(T(tot)), avg: fmt0(T(tot) / N), totColor: 'var(--ink)', weight: 600, op: 1 });
+    rows.push({ name: 'Total shown', color: 'transparent', cells: tot.map(y => cell(y)), total: fmt0(T(tot), idx.disp), avg: fmt0(T(tot) / N, idx.disp), totColor: 'var(--ink)', weight: 600, op: 1 });
   }
 
   const sticky = { position: 'sticky' as const, left: 0, background: 'var(--panel)' };

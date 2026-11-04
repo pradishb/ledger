@@ -6,8 +6,8 @@ Ported from the Claude Design file `Finance Tracker.dc.html`.
 ## Setup
 
 1. **Create a Supabase project** at https://supabase.com.
-2. **Run the schema:** open SQL Editor and paste and run `supabase/migrations/0001_init.sql`
-   (or `supabase db push` if you use the Supabase CLI).
+2. **Run the schema:** open SQL Editor and run each file in `supabase/migrations/` in order
+   (`0001_init.sql`, then `0002_currencies.sql`), or `supabase db push` if you use the Supabase CLI.
 3. **Make it single-user:**
    - Authentication → Users → *Add user*. Pick an email and password and tick *Auto confirm*.
    - Authentication → Sign In / Providers → turn **off** *Allow new users to sign up*.
@@ -42,8 +42,24 @@ Install on the phone:
   **Split** transactions store their lines in `transaction_splits` and are saved atomically by the
   `save_transaction` Postgres function.
 - **Security:** every table has row level security tied to `auth.uid()`.
+- **Currencies:** every account has a currency, and its amounts and balance are stored and shown in it.
+  Net worth, group totals and reports are converted to the *display currency* (picked on Overview and
+  Accounts, USD by default, remembered per device) at today's rates. The rates come from the free
+  [fawazahmed0 currency API](https://github.com/fawazahmed0/exchange-api) and are cached for offline use.
+  A transfer between currencies stores the amount received in `transfer_amount_cents`.
 
-Optional `.env` settings: `VITE_CURRENCY` (ISO code, default `USD`) and `VITE_LOCALE`.
+Optional `.env` setting: `VITE_LOCALE`.
+
+## Importing from HomeBank
+
+```sh
+node scripts/import-homebank.mjs file.xhb import.sql            # into an empty ledger
+node scripts/import-homebank.mjs --replace file.xhb import.sql  # delete the current ledger first
+```
+
+Run `import.sql` in the Supabase SQL Editor. It is one transaction, so if anything fails, nothing
+changes. Each account keeps its HomeBank currency, but HomeBank's exchange rates aren't imported. The script
+prints how many accounts are in each currency, and any account whose balance doesn't match HomeBank.
 
 ## Not built yet
 

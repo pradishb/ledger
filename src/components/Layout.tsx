@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { fetchLedger, LEDGER_KEY } from '../data/api';
 import { LedgerContext, type LedgerCtx } from '../data/context';
 import { applyTheme, initialTheme, useIsMobile, useOnline, type Theme } from '../data/hooks';
+import { useDisplayCurrency, useRates } from '../data/rates';
 import { balances, buildIndex, sumBy } from '../lib/ledger';
 import { todayStr } from '../lib/dates';
 import { errorMessage, fmt0 } from '../lib/format';
@@ -15,6 +16,8 @@ export function Layout({ onSignOut }: { onSignOut: () => void }) {
   const online = useOnline();
   const isMobile = useIsMobile();
   const query = useQuery({ queryKey: LEDGER_KEY, queryFn: fetchLedger });
+  const rates = useRates();
+  const [disp, setDisp] = useDisplayCurrency();
   const data = query.data;
   const today = todayStr();
   const accMatch = useMatch('/accounts/:id');
@@ -32,7 +35,7 @@ export function Layout({ onSignOut }: { onSignOut: () => void }) {
     toastTimer.current = window.setTimeout(() => setToastMsg(''), 2200);
   }, []);
 
-  const idx = useMemo(() => data && buildIndex(data), [data]);
+  const idx = useMemo(() => data && buildIndex(data, disp, rates.data), [data, disp, rates.data]);
   const bal = useMemo(() => data && balances(data, today), [data, today]);
 
   const openAdd = useCallback(() => {
@@ -72,9 +75,9 @@ export function Layout({ onSignOut }: { onSignOut: () => void }) {
     );
   }
 
-  const netWorth = sumBy(data.accounts, a => bal.get(a.id) ?? 0);
+  const netWorth = sumBy(data.accounts, a => idx.toDisp(a.id, bal.get(a.id) ?? 0));
   const ctx: LedgerCtx = {
-    data, idx, bal, netWorth, today, online, isMobile, theme, setTheme,
+    data, idx, bal, netWorth, setDisp, ratesError: rates.isError && !rates.data, today, online, isMobile, theme, setTheme,
     openAdd, openEdit, toast, signOut: onSignOut,
   };
 
@@ -90,7 +93,7 @@ export function Layout({ onSignOut }: { onSignOut: () => void }) {
           </nav>
           <div className="side-head">
             <span>Accounts</span>
-            <span className="mono">{fmt0(netWorth)}</span>
+            <span className="mono">{fmt0(netWorth, idx.disp)}</span>
           </div>
           <div className="side-accts">
             {data.accounts.map(a => {
@@ -98,7 +101,7 @@ export function Layout({ onSignOut }: { onSignOut: () => void }) {
               return (
                 <NavLink key={a.id} to={`/accounts/${a.id}`} className={({ isActive }) => `navbtn${isActive ? ' active' : ''}`}>
                   <span className="ell">{a.name}</span>
-                  <span className="side-bal" style={{ color: b < 0 ? 'var(--neg)' : 'var(--ink2)' }}>{fmt0(b)}</span>
+                  <span className="side-bal" style={{ color: b < 0 ? 'var(--neg)' : 'var(--ink2)' }}>{fmt0(b, idx.accCur(a.id))}</span>
                 </NavLink>
               );
             })}

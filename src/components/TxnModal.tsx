@@ -16,6 +16,8 @@ export interface Draft {
   type: TxnType;
   date: string;
   amount: string;
+  /** Transfers between currencies: what arrived in `xfer`. */
+  xamount: string;
   acc: string;
   xfer: string;
   pay: string;
@@ -35,7 +37,7 @@ const otherAccount = (accounts: Account[], acc: string) => String(accounts.find(
 export function blankDraft(accounts: Account[], today: string, base: Partial<Draft> = {}, curAcc = 0): Draft {
   const acc = base.acc ?? String(curAcc || accounts[0]?.id || 0);
   return {
-    id: 0, type: 'exp', date: today, amount: '', acc, xfer: otherAccount(accounts, acc), pay: 'None', info: '',
+    id: 0, type: 'exp', date: today, amount: '', xamount: '', acc, xfer: otherAccount(accounts, acc), pay: 'None', info: '',
     payee: '0', cat: '0', memo: '', tags: '', status: 'none', split: false, splits: blankLines(),
     ...base,
   };
@@ -47,6 +49,7 @@ export function draftFromTxn(t: Txn, accounts: Account[]): Draft {
     type: t.xfer ? 'xfer' : t.amount < 0 ? 'exp' : 'inc',
     date: t.date,
     amount: centsToInput(t.amount),
+    xamount: t.xamt == null ? '' : centsToInput(t.xamt),
     acc: String(t.acc),
     xfer: t.xfer ? String(t.xfer) : otherAccount(accounts, String(t.acc)),
     pay: t.pay, info: t.info, payee: String(t.payee), cat: String(t.cat), memo: t.memo,
@@ -65,8 +68,11 @@ function catOptions(idx: Index, type: CatType | null, blank: string) {
   return o;
 }
 
+/** A transfer between accounts in different currencies, which needs the amount received too. */
+const isCross = (d: Draft, idx: Index) => d.type === 'xfer' && !!+d.xfer && idx.accCur(+d.acc) !== idx.accCur(+d.xfer);
+
 /** Validate the form and build the RPC payload, or return an error message. */
-function toPayload(d: Draft): TxnPayload | string {
+function toPayload(d: Draft, idx: Index): TxnPayload | string {
   const isX = d.type === 'xfer', sign = d.type === 'inc' ? 1 : -1;
   if (!d.date) return 'Pick a date.';
   if (!+d.acc) return 'Choose an account.';
@@ -86,12 +92,18 @@ function toPayload(d: Draft): TxnPayload | string {
     if (isX && (!+d.xfer || d.xfer === d.acc)) return 'Choose two different accounts for a transfer.';
     if (!isX && d.cat === '0') return 'Choose a category, or split the transaction.';
   }
+  let xamt: number | null = null;
+  if (isCross(d, idx)) {
+    xamt = parseMoney(d.xamount);
+    if (!(xamt > 0)) return 'Enter the amount received.';
+  }
   return {
     id: d.id || null,
     date: d.date,
     account_id: +d.acc,
     transfer_account_id: isX ? +d.xfer : null,
     amount_cents: amount,
+    transfer_amount_cents: xamt,
     payment: d.pay,
     info: d.info.trim(),
     payee_id: isX || d.payee === '0' ? null : +d.payee,
@@ -123,6 +135,12 @@ export function TxnModal({ initial, onClose }: { initial: Draft; onClose: () => 
   const splitSum = d.splits.reduce((a, l) => a + centsOr0(l.amount), 0);
   const catOpts = catOptions(idx, d.type === 'xfer' ? null : d.type, '— Choose category —');
   const accounts = data.accounts;
+  const cur = idx.accCur(+d.acc);
+  const cross = isCross(d, idx);
+  const xcur = idx.accCur(+d.xfer);
+  // Suggested amount received, at today's rate.
+  const conv = cross && parseMoney(d.amount) > 0 ? idx.convert(parseMoney(d.amount), cur, xcur) : null;
+  const est = conv === null ? '' : centsToInput(conv);
 
   const updLine = (i: number, patch: Partial<Line>) => setD({ splits: d.splits.map((x, j) => (j === i ? { ...x, ...patch } : x)) });
   const removeLine = (i: number) => setD({
@@ -138,7 +156,7 @@ export function TxnModal({ initial, onClose }: { initial: Draft; onClose: () => 
   };
 
   async function save(keep: boolean) {
-    const p = toPayload(d);
+    const p = toPayload(d, idx);
     if (typeof p === 'string') return setErr(p);
     try {
       await saveM.mutateAsync(p);
@@ -179,7 +197,7 @@ export function TxnModal({ initial, onClose }: { initial: Draft; onClose: () => 
             </label>
             <label className="field">{split ? 'Amount (sum of splits)' : 'Amount'}
               <div className={`amount-box${split ? ' ro' : ''}`}>
-                <span>{d.type === 'inc' ? '+' : '−'}{currencySymbol}</span>
+                <span>{d.type === 'inc' ? '+' : '−'}{currencySymbol(cur)}</span>
                 <input value={split ? (splitSum / 100).toFixed(2) : d.amount} readOnly={split}
                   onChange={e => setD({ amount: e.target.value })} placeholder="0.00" inputMode="decimal" autoFocus={!d.id} />
               </div>
@@ -204,6 +222,15 @@ export function TxnModal({ initial, onClose }: { initial: Draft; onClose: () => 
                   <option value="0">— No payee —</option>
                   {[...data.payees].sort((a, b) => a.name.localeCompare(b.name)).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                 </select>
+              </label>
+            )}
+            {cross && (
+              <label className="field">Amount received
+                <div className="amount-box">
+                  <span>+{currencySymbol(xcur)}</span>
+                  <input value={d.xamount} onChange={e => setD({ xamount: e.target.value })}
+                    placeholder={est || '0.00'} inputMode="decimal" />
+                </div>
               </label>
             )}
             <label className="field">Payment
@@ -246,7 +273,7 @@ export function TxnModal({ initial, onClose }: { initial: Draft; onClose: () => 
                     ))}
                     <div className="split-foot">
                       <button type="button" className="link" style={{ fontWeight: 500 }} onClick={() => setD({ splits: [...d.splits, { cat: '0', memo: '', amount: '' }] })}>+ Add line</button>
-                      <span>{d.splits.filter(l => centsOr0(l.amount) > 0).length} lines · {fmt(splitSum)}</span>
+                      <span>{d.splits.filter(l => centsOr0(l.amount) > 0).length} lines · {fmt(splitSum, cur)}</span>
                     </div>
                   </div>
                 )}

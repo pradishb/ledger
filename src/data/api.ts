@@ -21,34 +21,36 @@ async function fetchAll<T>(
   }
 }
 
-interface AccountRow { id: number; name: string; type: AccountType; institution: string; opening_cents: number; sort: number }
+interface AccountRow { id: number; name: string; type: AccountType; institution: string; opening_cents: number; sort: number; currency: string }
 interface CategoryRow { id: number; name: string; parent_id: number | null; type: CatType; color: string | null }
 interface PayeeRow { id: number; name: string; default_category_id: number | null; default_payment: string }
 interface SplitRow { position: number; category_id: number; memo: string; amount_cents: number }
 interface TxnRow {
   id: number; date: string; account_id: number; transfer_account_id: number | null; amount_cents: number;
+  transfer_amount_cents: number | null;
   payment: string; info: string; payee_id: number | null; category_id: number | null; memo: string;
   tags: string[]; status: Status; transaction_splits: SplitRow[];
 }
 
 export async function fetchLedger(): Promise<LedgerData> {
   const [accounts, cats, payees, txns] = await Promise.all([
-    fetchAll<AccountRow>((a, b) => supabase.from('accounts').select('id,name,type,institution,opening_cents,sort').order('sort').order('id').range(a, b)),
+    fetchAll<AccountRow>((a, b) => supabase.from('accounts').select('id,name,type,institution,opening_cents,sort,currency').order('sort').order('id').range(a, b)),
     fetchAll<CategoryRow>((a, b) => supabase.from('categories').select('id,name,parent_id,type,color').order('id').range(a, b)),
     fetchAll<PayeeRow>((a, b) => supabase.from('payees').select('id,name,default_category_id,default_payment').order('id').range(a, b)),
     fetchAll<TxnRow>((a, b) =>
       supabase.from('transactions')
-        .select('id,date,account_id,transfer_account_id,amount_cents,payment,info,payee_id,category_id,memo,tags,status,transaction_splits(position,category_id,memo,amount_cents)')
+        .select('id,date,account_id,transfer_account_id,amount_cents,transfer_amount_cents,payment,info,payee_id,category_id,memo,tags,status,transaction_splits(position,category_id,memo,amount_cents)')
         .order('id').range(a, b)),
   ]);
   return {
     accounts: accounts.map((r): Account => ({
-      id: r.id, name: r.name, type: r.type, institution: r.institution, opening: Number(r.opening_cents), sort: r.sort,
+      id: r.id, name: r.name, type: r.type, institution: r.institution, opening: Number(r.opening_cents), sort: r.sort, currency: r.currency,
     })),
     cats: cats.map((r): Category => ({ id: r.id, name: r.name, parent: r.parent_id ?? 0, type: r.type, color: r.color })),
     payees: payees.map((r): Payee => ({ id: r.id, name: r.name, defCat: r.default_category_id ?? 0, defPay: r.default_payment })),
     txns: txns.map((r): Txn => ({
       id: r.id, date: r.date, acc: r.account_id, xfer: r.transfer_account_id ?? 0, amount: Number(r.amount_cents),
+      xamt: r.transfer_amount_cents == null ? null : Number(r.transfer_amount_cents),
       pay: r.payment, info: r.info, payee: r.payee_id ?? 0, cat: r.category_id ?? 0, memo: r.memo,
       tags: r.tags ?? [], status: r.status,
       splits: r.transaction_splits?.length
@@ -70,6 +72,7 @@ export interface TxnPayload {
   account_id: number;
   transfer_account_id: number | null;
   amount_cents: number;
+  transfer_amount_cents: number | null;
   payment: string;
   info: string;
   payee_id: number | null;
@@ -86,8 +89,10 @@ export const api = {
 
   addAccount: async (a: Omit<Account, 'id' | 'sort'>) =>
     void check(await supabase.from('accounts').insert({
-      name: a.name, type: a.type, institution: a.institution, opening_cents: a.opening,
+      name: a.name, type: a.type, institution: a.institution, opening_cents: a.opening, currency: a.currency,
     })),
+  setAccountCurrency: async ({ id, currency }: { id: number; currency: string }) =>
+    void check(await supabase.from('accounts').update({ currency }).eq('id', id)),
 
   addCategory: async (c: { name: string; parent: number; type: CatType; color: string | null }) =>
     void check(await supabase.from('categories').insert({ name: c.name, parent_id: c.parent || null, type: c.type, color: c.color })),

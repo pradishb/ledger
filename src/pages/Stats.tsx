@@ -19,7 +19,7 @@ export function Stats() {
   const [expanded, setExpanded] = useState<Record<number, boolean>>({});
 
   const [from, to] = periodRange(period, today);
-  const fl = flows(data.txns, from, to).filter(f => idx.catType(f.cat) === type);
+  const fl = flows(data.txns, from, to, idx).filter(f => idx.catType(f.cat) === type);
   const sg = type === 'exp' ? -1 : 1;
   const total = fl.reduce((a, f) => a + sg * f.amount, 0);
   const pct = (x: number) => (total > 0 ? ((x / total) * 100).toFixed(1) + '%' : '—');
@@ -87,7 +87,7 @@ export function Stats() {
                 <Donut segs={segs} />
                 <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
                   <span className="muted" style={{ fontSize: 11.5 }}>{type === 'exp' ? 'Total spent' : 'Total received'}</span>
-                  <span className="mono" style={{ fontSize: 19, fontWeight: 500, letterSpacing: '-0.02em' }}>{fmt(total)}</span>
+                  <span className="mono" style={{ fontSize: 19, fontWeight: 500, letterSpacing: '-0.02em' }}>{fmt(total, idx.disp)}</span>
                   <span className="muted" style={{ fontSize: 11.5 }}>{fl.length} entries</span>
                 </div>
               </div>
@@ -121,7 +121,7 @@ export function Stats() {
                         </span>
                       </td>
                       <td><Bar width={(Math.max(0, r.amount) / mx) * 100} color={r.color} opacity={r.sub ? 0.55 : 1} height={7} /></td>
-                      <td className="num" style={{ color: r.sub ? 'var(--ink2)' : 'var(--ink)' }}>{fmt(r.amount)}</td>
+                      <td className="num" style={{ color: r.sub ? 'var(--ink2)' : 'var(--ink)' }}>{fmt(r.amount, idx.disp)}</td>
                       <td className="num muted" style={{ fontSize: 11.5 }}>{pct(r.amount)}</td>
                     </tr>
                   ))}

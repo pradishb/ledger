@@ -1,7 +1,7 @@
 import { Link, useNavigate } from 'react-router';
 import { useLedger } from '../data/context';
 import { api, useLedgerMutation } from '../data/api';
-import { Bar, Chevron, Dot, Header, Panel, useOpenGroups } from '../components/ui';
+import { Bar, Chevron, DisplayCurrency, Dot, Header, Panel, useOpenGroups } from '../components/ui';
 import { ChartIE, Sized } from '../components/Charts';
 import { accountGroups, balColor, describeTxn, flows, sumType } from '../lib/ledger';
 import { addDays, fdate, longDate, monthsBack } from '../lib/dates';
@@ -13,15 +13,17 @@ export function Overview() {
   const { isOpen, toggle } = useOpenGroups();
   const seed = useLedgerMutation(api.seedCategories);
 
-  const fl30 = flows(data.txns, addDays(today, -30), today);
+  const fl30 = flows(data.txns, addDays(today, -30), today, idx);
   const inc = sumType(fl30, 'inc', idx), exp = sumType(fl30, 'exp', idx);
-  const assets = data.accounts.reduce((a, x) => a + Math.max(0, bal.get(x.id) ?? 0), 0);
+  const assets = data.accounts.reduce((a, x) => a + Math.max(0, idx.toDisp(x.id, bal.get(x.id) ?? 0)), 0);
 
   const kpis = [
-    { label: 'Net worth', value: fmt(netWorth), sub: `${fmt0(assets)} assets · ${fmt0(assets - netWorth)} owed`, color: 'var(--ink)' },
-    { label: 'Income, last 30 days', value: fmt(inc), sub: 'Transfers excluded', color: 'var(--pos)' },
-    { label: 'Spending, last 30 days', value: fmt(exp), sub: `${fl30.filter(f => idx.catType(f.cat) === 'exp').length} entries`, color: 'var(--ink)' },
-    { label: 'Saved, last 30 days', value: fmt(inc - exp), sub: inc ? `${Math.round(((inc - exp) / inc) * 100)}% of income` : '—', color: balColor(inc - exp) },
+    { label: 'Net worth', value: fmt(netWorth, idx.disp), sub: idx.unrated.length
+      ? `${idx.unrated.join(', ')} left out: no exchange rate`
+      : `${fmt0(assets, idx.disp)} assets · ${fmt0(assets - netWorth, idx.disp)} owed`, color: 'var(--ink)' },
+    { label: 'Income, last 30 days', value: fmt(inc, idx.disp), sub: 'Transfers excluded', color: 'var(--pos)' },
+    { label: 'Spending, last 30 days', value: fmt(exp, idx.disp), sub: `${fl30.filter(f => idx.catType(f.cat) === 'exp').length} entries`, color: 'var(--ink)' },
+    { label: 'Saved, last 30 days', value: fmt(inc - exp, idx.disp), sub: inc ? `${Math.round(((inc - exp) / inc) * 100)}% of income` : '—', color: balColor(inc - exp) },
   ];
 
   const byTop = new Map<number, number>();
@@ -34,7 +36,7 @@ export function Overview() {
   const spendMax = spend[0]?.val || 1;
 
   const months = monthsBack(6, today).map(m => {
-    const fl = flows(data.txns, m.from, m.to);
+    const fl = flows(data.txns, m.from, m.to, idx);
     return { ...m, inc: sumType(fl, 'inc', idx), exp: sumType(fl, 'exp', idx) };
   });
 
@@ -46,7 +48,7 @@ export function Overview() {
 
   return (
     <>
-      <Header title="Overview" subtitle={longDate(today)} />
+      <Header title="Overview" subtitle={longDate(today)}><DisplayCurrency /></Header>
       <div className="content">
         <div className="stack">
           {needsSetup && (
@@ -84,19 +86,19 @@ export function Overview() {
             <Panel title="Accounts" action={<Link className="link" to="/accounts">All accounts</Link>}>
               <table className="tbl">
                 <tbody>
-                  {accountGroups(data.accounts, bal).map(g => [
+                  {accountGroups(data.accounts, bal, idx).map(g => [
                     <tr className="group toggle" key={g.label} onClick={() => toggle(g.label)} aria-expanded={isOpen(g.label)}>
                       <td style={{ fontWeight: 600, color: 'var(--ink2)', fontSize: 11.5 }}>
                         <Chevron open={isOpen(g.label)} />{g.label} <span className="muted" style={{ fontWeight: 400 }}>· {g.accounts.length}</span>
                       </td>
-                      <td className="num" style={{ fontWeight: 600, color: balColor(g.balance) }}>{fmt(g.balance)}</td>
+                      <td className="num" style={{ fontWeight: 600, color: balColor(g.balance) }}>{fmt(g.balance, idx.disp)}</td>
                     </tr>,
                     ...(isOpen(g.label) ? g.accounts : []).map(a => {
                       const b = bal.get(a.id) ?? 0;
                       return (
                         <tr className="clickable" key={a.id} onClick={() => navigate(`/accounts/${a.id}`)}>
                           <td style={{ paddingLeft: 28 }}>{a.name}</td>
-                          <td className="num" style={{ color: balColor(b) }}>{fmt(b)}</td>
+                          <td className="num" style={{ color: balColor(b) }}>{fmt(b, idx.accCur(a.id))}</td>
                         </tr>
                       );
                     }),
@@ -115,7 +117,7 @@ export function Overview() {
                       <span className="ell">{x.c.name}</span>
                     </div>
                     <Bar width={(x.val / spendMax) * 100} color={x.c.color ?? 'var(--ink3)'} />
-                    <div className="r mono" style={{ fontSize: 12 }}>{fmt(x.val)}</div>
+                    <div className="r mono" style={{ fontSize: 12 }}>{fmt(x.val, idx.disp)}</div>
                     <div className="r mono muted" style={{ fontSize: 11.5 }}>{exp ? Math.round((x.val / exp) * 100) : 0}%</div>
                   </div>
                 ))}
@@ -142,7 +144,7 @@ export function Overview() {
                         <td className="small muted" style={{ width: 64, whiteSpace: 'nowrap', paddingRight: 0 }}>{fdate(t.date, today)}</td>
                         <td className="ell">{v.payee}</td>
                         <td className="ell small hide-m" style={{ color: v.catColor }}>{v.category}</td>
-                        <td className="num" style={{ width: 100, color: v.amtColor }}>{fmt(t.amount)}</td>
+                        <td className="num" style={{ width: 100, color: v.amtColor }}>{fmt(t.amount, idx.accCur(t.acc))}</td>
                       </tr>
                     );
                   })}

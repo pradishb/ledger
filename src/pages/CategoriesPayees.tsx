@@ -35,8 +35,9 @@ export function CategoriesPayees() {
     for (const e of entries) {
       inc(cnt, e.cat, 1);
       if (t.date >= f12 && t.date <= t12) {
-        inc(tot, e.cat, e.amount);
-        if (t.payee) inc(ptot, t.payee, e.amount);
+        const v = idx.toDisp(t.acc, e.amount);
+        inc(tot, e.cat, v);
+        if (t.payee) inc(ptot, t.payee, v);
       }
     }
   }
@@ -110,8 +111,8 @@ export function CategoriesPayees() {
                       <tr className="group" key={c.id}>
                         <td><span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}><Dot color={color} /><b style={{ fontWeight: 600 }}>{c.name}</b></span></td>
                         <td className="num hide-m" style={{ color: 'var(--ink2)' }}>{tc}</td>
-                        <td className="num" style={{ fontWeight: 600 }}>{fmt(tt)}</td>
-                        <td className="num hide-m" style={{ color: 'var(--ink2)' }}>{fmt(Math.round(tt / 12))}</td>
+                        <td className="num" style={{ fontWeight: 600 }}>{fmt(tt, idx.disp)}</td>
+                        <td className="num hide-m" style={{ color: 'var(--ink2)' }}>{fmt(Math.round(tt / 12), idx.disp)}</td>
                         <td className="r">{canDelete && <button className="link danger" disabled={!online} onClick={() => run(delCat, c.id)}>Delete</button>}</td>
                       </tr>,
                       ...subs.map(x => {
@@ -120,8 +121,8 @@ export function CategoriesPayees() {
                           <tr key={x.id}>
                             <td style={{ paddingLeft: 38 }}>{x.name}</td>
                             <td className="num hide-m" style={{ color: 'var(--ink2)' }}>{n}</td>
-                            <td className="num">{fmt(sv)}</td>
-                            <td className="num hide-m" style={{ color: 'var(--ink2)' }}>{fmt(Math.round(sv / 12))}</td>
+                            <td className="num">{fmt(sv, idx.disp)}</td>
+                            <td className="num hide-m" style={{ color: 'var(--ink2)' }}>{fmt(Math.round(sv / 12), idx.disp)}</td>
                             <td className="r">{n === 0 && !usedAsDefault(x.id) && <button className="link danger" disabled={!online} onClick={() => run(delCat, x.id)}>Delete</button>}</td>
                           </tr>
                         );
@@ -174,7 +175,7 @@ export function CategoriesPayees() {
                             </select>
                           </td>
                           <td className="num" style={{ color: 'var(--ink2)' }}>{used}</td>
-                          <td className="num" style={{ color: tt > 0 ? 'var(--pos)' : 'var(--ink)' }}>{fmt(tt)}</td>
+                          <td className="num" style={{ color: tt > 0 ? 'var(--pos)' : 'var(--ink)' }}>{fmt(tt, idx.disp)}</td>
                           <td className="r">{!used && <button className="link danger" disabled={!online} onClick={() => run(delPayee, p.id)}>Delete</button>}</td>
                         </tr>
                       );

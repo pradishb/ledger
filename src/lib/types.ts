@@ -1,4 +1,4 @@
-// Domain types. Money is always integer cents; "no reference" is 0.
+// Domain types. Money is always integer cents in the account's own currency; "no reference" is 0.
 
 export type AccountType = 'bank' | 'cash' | 'credit' | 'asset' | 'liability';
 export type CatType = 'exp' | 'inc';
@@ -11,6 +11,8 @@ export interface Account {
   institution: string;
   opening: number;
   sort: number;
+  /** ISO 4217 code; the account's amounts are in this currency. */
+  currency: string;
 }
 
 export interface Category {
@@ -41,6 +43,8 @@ export interface Txn {
   /** Destination account for transfers, else 0. */
   xfer: number;
   amount: number;
+  /** For transfers: what arrived in `xfer`, in its currency. Null means -amount. */
+  xamt: number | null;
   pay: string;
   info: string;
   payee: number;
