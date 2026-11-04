@@ -129,28 +129,3 @@ export function ChartStack({ months, series, w, h }: { months: Month[]; series: 
   return <svg viewBox={`0 0 ${w} ${h}`} width="100%" style={{ display: 'block' }}>{els}</svg>;
 }
 
-export interface Seg { name: string; value: number; color: string }
-
-export function Donut({ segs, size = 220 }: { segs: Seg[]; size?: number }) {
-  const cur = useLedger().idx.disp;
-  const S = 220, r = 86, sw = 26, C = 2 * Math.PI * r;
-  const tot = segs.reduce((a, s) => a + s.value, 0) || 1;
-  let acc = 0;
-  return (
-    <svg viewBox={`0 0 ${S} ${S}`} width={size} height={size} style={{ display: 'block' }}>
-      <circle cx={S / 2} cy={S / 2} r={r} fill="none" strokeWidth={sw} style={{ stroke: 'var(--sunk)' }} />
-      {segs.map((s, i) => {
-        const len = (s.value / tot) * C;
-        const el = (
-          <circle key={i} cx={S / 2} cy={S / 2} r={r} fill="none" strokeWidth={sw}
-            strokeDasharray={`${Math.max(0, len - 2)} ${C}`} strokeDashoffset={-acc}
-            transform={`rotate(-90 ${S / 2} ${S / 2})`} style={{ stroke: s.color }}>
-            <title>{`${s.name}: ${fmt(s.value, cur)}`}</title>
-          </circle>
-        );
-        acc += len;
-        return el;
-      })}
-    </svg>
-  );
-}

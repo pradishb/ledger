@@ -1,11 +1,10 @@
-import { useState } from 'react';
+import { useState, type CSSProperties } from 'react';
 import { useLedger } from '../data/context';
-import { Bar, Dot, Header, RangePicker, Seg, useRange } from '../components/common';
-import { Donut, type Seg as DonutSeg } from '../components/Charts';
+import { Bar, Dot, Header, Panel, RangePicker, Seg, useRange } from '../components/common';
 import { flows } from '../lib/ledger';
 import { rangeDates, rangeName } from '../lib/dates';
 import { fmt } from '../lib/format';
-import { OTHER, PALETTE, rankColor, type CatType, type Category } from '../lib/types';
+import { rankColor, type CatType, type Category } from '../lib/types';
 
 interface Row {
   key: string; name: string; color: string; amount: number; sub: boolean; chev: string; onClick?: () => void;
@@ -25,7 +24,6 @@ export function Stats() {
   const pct = (x: number) => (total > 0 ? ((x / total) * 100).toFixed(1) + '%' : '—');
 
   const rows: Row[] = [];
-  let segs: DonutSeg[] = [];
 
   if (by === 'cat') {
     const agg = new Map<number, { c: Category; total: number; subs: Map<number, number> }>();
@@ -54,18 +52,16 @@ export function Stats() {
         }));
       }
     });
-    segs = list.map((g, i) => ({ name: g.c.name, value: g.total, color: rankColor(i) })).filter(x => x.value > 0);
   } else {
     const agg = new Map<number, number>();
     for (const f of fl) agg.set(f.payee, (agg.get(f.payee) ?? 0) + sg * f.amount);
     const list = [...agg].map(([id, val]) => ({ id, name: idx.payMap.get(id)?.name || '(no payee)', val }))
       .filter(x => x.val !== 0).sort((a, b) => b.val - a.val);
-    list.forEach((x, i) => rows.push({ key: `p${x.id}`, name: x.name, color: i < 8 ? PALETTE[i] : OTHER, amount: x.val, sub: false, chev: '' }));
-    segs = list.slice(0, 8).filter(x => x.val > 0).map((x, i) => ({ name: x.name, value: x.val, color: PALETTE[i] }));
-    const rest = list.slice(8).reduce((a, x) => a + Math.max(0, x.val), 0);
-    if (rest > 0) segs.push({ name: 'Other', value: rest, color: OTHER });
+    list.forEach((x, i) => rows.push({ key: `p${x.id}`, name: x.name, color: rankColor(i), amount: x.val, sub: false, chev: '' }));
   }
   const mx = Math.max(1, ...rows.filter(r => !r.sub).map(r => r.amount));
+  // Size the amount column to the longest amount, so millions never run into the share.
+  const amtW = Math.max(0, ...rows.map(r => fmt(r.amount, idx.disp).length));
 
   return (
     <>
@@ -78,54 +74,29 @@ export function Stats() {
             <RangePicker value={period} onChange={setPeriod} />
           </div>
 
-          <div className="grid2">
-            <div className="panel" style={{ padding: 20, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
-              <div style={{ position: 'relative', width: 220, height: 220 }}>
-                <Donut segs={segs} />
-                <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
-                  <span className="muted" style={{ fontSize: 11.5 }}>{type === 'exp' ? 'Total spent' : 'Total received'}</span>
-                  <span className="mono" style={{ fontSize: 19, fontWeight: 500, letterSpacing: '-0.02em' }}>{fmt(total, idx.disp)}</span>
-                  <span className="muted" style={{ fontSize: 11.5 }}>{fl.length} entries</span>
-                </div>
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 14px', width: '100%' }}>
-                {segs.slice(0, 10).map(s => (
-                  <div key={s.name} style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 11.5, color: 'var(--ink2)', minWidth: 0 }}>
-                    <Dot color={s.color} /><span className="ell">{s.name}</span>
+          {/* One list, like the Overview's "Where your money goes": name, bar, amount, share. */}
+          <div style={{ maxWidth: 920 }}>
+            <Panel title={`${type === 'exp' ? 'Where your money goes' : 'Where your money comes from'} · ${by === 'cat' ? 'by category' : 'by payee'}`}
+              action={<span className="flex items-baseline gap-2 text-xs text-muted-foreground">
+                {fl.length} entries
+                <span className="font-mono text-[13px] font-medium" style={{ color: type === 'exp' ? 'var(--out)' : 'var(--inc)' }}>{fmt(total, idx.disp)}</span>
+              </span>}>
+              <div className="panel-body stats-list" style={{ '--amt-w': `${amtW + 1}ch` } as CSSProperties}>
+                {rows.map(r => (
+                  <div key={r.key} className={`spend-row${r.sub ? ' sub' : ''}${r.onClick ? ' clickable' : ''}`} onClick={r.onClick}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, paddingLeft: r.sub ? 26 : 0 }}>
+                      <span style={{ width: 10, flex: 'none', color: 'var(--ink3)', fontSize: 10 }}>{r.chev}</span>
+                      {!r.sub && <Dot color={r.color} />}
+                      <span className="ell" style={{ fontWeight: r.sub ? 400 : 500, color: r.sub ? 'var(--ink2)' : 'var(--ink)' }}>{r.name}</span>
+                    </div>
+                    <Bar width={(Math.max(0, r.amount) / mx) * 100} color={r.color} opacity={r.sub ? 0.55 : 1} />
+                    <div className="r mono" style={{ fontSize: 12, color: type === 'exp' ? 'var(--out)' : 'var(--inc)', opacity: r.sub ? 0.75 : 1 }}>{fmt(r.amount, idx.disp)}</div>
+                    <div className="r mono muted" style={{ fontSize: 11.5 }}>{pct(r.amount)}</div>
                   </div>
                 ))}
+                {!rows.length && <div className="empty">Nothing recorded for this period.</div>}
               </div>
-            </div>
-
-            <div className="panel">
-              <table className="tbl tbl-fixed">
-                <thead>
-                  <tr>
-                    <th>{by === 'cat' ? 'Category' : 'Payee'}</th>
-                    <th style={{ width: '22%' }} />
-                    <th className="r" style={{ width: 100 }}>Amount</th>
-                    <th className="r" style={{ width: 64 }}>Share</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map(r => (
-                    <tr key={r.key} onClick={r.onClick} style={{ cursor: r.onClick ? 'pointer' : 'default', background: r.sub ? 'var(--sunk)' : undefined }}>
-                      <td className="ell" style={{ paddingLeft: r.sub ? 30 : 10 }}>
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7 }}>
-                          <span style={{ width: 10, color: 'var(--ink3)', fontSize: 10 }}>{r.chev}</span>
-                          <Dot color={r.color} opacity={r.sub ? 0 : 1} />
-                          <span style={{ fontWeight: r.sub ? 400 : 600, color: r.sub ? 'var(--ink2)' : 'var(--ink)', fontSize: r.sub ? 12.5 : 13 }}>{r.name}</span>
-                        </span>
-                      </td>
-                      <td><Bar width={(Math.max(0, r.amount) / mx) * 100} color={r.color} opacity={r.sub ? 0.55 : 1} height={7} /></td>
-                      <td className="num" style={{ color: type === 'exp' ? 'var(--out)' : 'var(--inc)', opacity: r.sub ? 0.75 : 1 }}>{fmt(r.amount, idx.disp)}</td>
-                      <td className="num muted" style={{ fontSize: 11.5 }}>{pct(r.amount)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              {!rows.length && <div className="empty">Nothing recorded for this period.</div>}
-            </div>
+            </Panel>
           </div>
         </div>
       </div>
