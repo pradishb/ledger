@@ -1,10 +1,11 @@
+import { useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { useLedger } from '../data/context';
 import { api, useLedgerMutation } from '../data/api';
 import { Bar, Chevron, DisplayCurrency, Dot, Header, Panel, RangePicker, useOpenGroups, useRange } from '../components/ui';
 import { ChartIE, SizedBox } from '../components/Charts';
 import { accountGroups, balColor, flows, sumType } from '../lib/ledger';
-import { buckets, longDate, rangeDates, rangeName, UNIT_NAME } from '../lib/dates';
+import { autoUnit, buckets, longDate, rangeDates, rangeName, unitFits, UNIT_NAME, UNITS, type Unit } from '../lib/dates';
 import { errorMessage, fmt, fmt0 } from '../lib/format';
 import { rankColor } from '../lib/types';
 
@@ -30,8 +31,13 @@ export function Overview() {
     { label: `Saved · ${rl}`, value: fmt(inc - exp, idx.disp), sub: inc ? `${Math.round(((inc - exp) / inc) * 100)}% of income` : '—', color: balColor(inc - exp) },
   ];
 
+  // Each panel has its own range; new ones start from the cards' range.
+  const [sRange, setSRange] = useRange('overview.spend', range);
+  const [sFrom, sTo] = rangeDates(sRange, today);
+  const sFl = flows(data.txns, sFrom, sTo, idx);
+  const sExp = sumType(sFl, 'exp', idx);
   const byTop = new Map<number, number>();
-  for (const f of fl30) {
+  for (const f of sFl) {
     if (idx.catType(f.cat) !== 'exp') continue;
     const tp = idx.topOf(f.cat);
     if (tp) byTop.set(tp.id, (byTop.get(tp.id) ?? 0) - f.amount);
@@ -39,11 +45,17 @@ export function Overview() {
   const spend = [...byTop].map(([id, val]) => ({ c: idx.catMap.get(id)!, val })).filter(x => x.val > 0).sort((a, b) => b.val - a.val);
   const spendMax = spend[0]?.val || 1;
 
-  // Chart the selected range; open-ended ranges stop where the transactions do.
+  // Chart its own range, by the chosen unit; open-ended ranges stop where the transactions do.
+  const [cRange, setCRange] = useRange('overview.chart', range);
+  const [unit, setUnit] = useUnit();
+  const [crFrom, crTo] = rangeDates(cRange, today);
   let first = today, last = today;
   for (const t of data.txns) { if (t.date < first) first = t.date; if (t.date > last) last = t.date; }
-  const cFrom = rFrom < first ? first : rFrom, cTo = rTo > last ? last : rTo;
-  const chart = cFrom <= cTo ? buckets(cFrom, cTo) : buckets(rFrom, rTo);
+  let cFrom = crFrom < first ? first : crFrom, cTo = crTo > last ? last : crTo;
+  if (cFrom > cTo) [cFrom, cTo] = [crFrom, crTo];
+  const chart = buckets(cFrom, cTo, unit === 'auto' ? undefined : unit);
+  // A unit too fine for the range (say daily over ten years) falls back to auto; show that.
+  const shownUnit = unit !== 'auto' && unitFits(cFrom, cTo, unit) ? unit : 'auto';
   const months = chart.list.map(m => {
     const fl = flows(data.txns, m.from, m.to, idx);
     return { ...m, inc: sumType(fl, 'inc', idx), exp: sumType(fl, 'exp', idx) };
@@ -119,7 +131,7 @@ export function Overview() {
               </div>
             </Panel>
 
-            <Panel title={`Where your money goes · ${rl}`} action={<Link className="link" to="/stats">Statistics</Link>}>
+            <Panel title="Where your money goes" action={<RangePicker compact alignRight value={sRange} onChange={setSRange} />}>
               <div className="panel-body">
                 {spend.map((x, i) => (
                   <div className="spend-row" key={x.c.id}>
@@ -129,19 +141,28 @@ export function Overview() {
                     </div>
                     <Bar width={(x.val / spendMax) * 100} color={rankColor(i)} />
                     <div className="r mono" style={{ fontSize: 12 }}>{fmt(x.val, idx.disp)}</div>
-                    <div className="r mono muted" style={{ fontSize: 11.5 }}>{exp ? Math.round((x.val / exp) * 100) : 0}%</div>
+                    <div className="r mono muted" style={{ fontSize: 11.5 }}>{sExp ? Math.round((x.val / sExp) * 100) : 0}%</div>
                   </div>
                 ))}
                 {!spend.length && <div className="empty">No spending in this period.</div>}
               </div>
             </Panel>
 
-            <Panel title={`Income and expenses · ${UNIT_NAME[chart.unit]}`} action={
-              <div className="legend">
+            <Panel title="Income and expenses" action={
+              <div className="panel-tools">
+                <select className="select sm" value={shownUnit} onChange={e => setUnit(e.target.value as Unit | 'auto')} title="One bar per">
+                  <option value="auto">Auto ({UNIT_NAME[autoUnit(cFrom, cTo)].toLowerCase()})</option>
+                  {UNITS.map(u => (
+                    <option key={u} value={u} disabled={!unitFits(cFrom, cTo, u)}>{UNIT_NAME[u]}</option>
+                  ))}
+                </select>
+                <RangePicker compact alignRight value={cRange} onChange={setCRange} />
+              </div>
+            }>
+              <div className="legend chart-legend">
                 <span><Dot color="var(--acc)" />Income</span>
                 <span><Dot color="var(--exp)" />Expenses</span>
               </div>
-            }>
               <SizedBox style={{ padding: '10px 10px 6px', minHeight: 260 }}>{(w, h) => <ChartIE months={months} w={w} h={h} />}</SizedBox>
             </Panel>
           </div>
@@ -149,4 +170,18 @@ export function Overview() {
       </div>
     </>
   );
+}
+
+const UNIT_KEY = 'ledger.unit.overview';
+
+/** The chart's bar size, remembered per device; 'auto' sizes it to the range. */
+function useUnit() {
+  const [u, setU] = useState<Unit | 'auto'>(() => {
+    try { const v = localStorage.getItem(UNIT_KEY); return v && (UNITS as string[]).includes(v) ? (v as Unit) : 'auto'; } catch { return 'auto'; }
+  });
+  const set = (v: Unit | 'auto') => {
+    setU(v);
+    try { localStorage.setItem(UNIT_KEY, v); } catch { /* storage unavailable */ }
+  };
+  return [u, set] as const;
 }

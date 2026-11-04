@@ -165,14 +165,31 @@ export function rangeLabel(from: string, to: string, today: string) {
   return `${fdate(from, today)} – ${fdate(to, today)}`;
 }
 
-export type Unit = 'day' | 'week' | 'month' | 'year';
-export const UNIT_NAME: Record<Unit, string> = { day: 'daily', week: 'weekly', month: 'monthly', year: 'yearly' };
+export type Unit = 'day' | 'week' | 'month' | 'quarter' | 'year';
+export const UNITS: Unit[] = ['day', 'week', 'month', 'quarter', 'year'];
+export const UNIT_NAME: Record<Unit, string> = { day: 'Daily', week: 'Weekly', month: 'Monthly', quarter: 'Quarterly', year: 'Yearly' };
+const UNIT_DAYS: Record<Unit, number> = { day: 1, week: 7, month: 30.4, quarter: 91.3, year: 365.25 };
+/** More bars than this and a chart stops being readable. */
+const MAX_BARS = 400;
 
-/** Split [from, to] into chart bars sized to fit the span; the first and last are clipped to the range. */
-export function buckets(from: string, to: string): { unit: Unit; list: Month[] } {
+const spanDays = (from: string, to: string) => {
   const [fy, fm, fd] = parts(from), [ty, tm, td] = parts(to);
-  const span = Math.round((Date.UTC(ty, tm - 1, td) - Date.UTC(fy, fm - 1, fd)) / 864e5) + 1;
-  const unit: Unit = span <= 31 ? 'day' : span <= 92 ? 'week' : span <= 1100 ? 'month' : 'year';
+  return Math.round((Date.UTC(ty, tm - 1, td) - Date.UTC(fy, fm - 1, fd)) / 864e5) + 1;
+};
+
+/** The unit that suits the span: about 30 bars or fewer at the finest grain that fits. */
+export function autoUnit(from: string, to: string): Unit {
+  const span = spanDays(from, to);
+  return span <= 31 ? 'day' : span <= 92 ? 'week' : span <= 1100 ? 'month' : 'year';
+}
+
+/** Whether charting [from, to] by `unit` stays under MAX_BARS bars. */
+export const unitFits = (from: string, to: string, unit: Unit) => spanDays(from, to) / UNIT_DAYS[unit] <= MAX_BARS;
+
+/** Split [from, to] into chart bars of `unit` (or one sized to fit); the first and last are clipped to the range. */
+export function buckets(from: string, to: string, want?: Unit): { unit: Unit; list: Month[] } {
+  const [fy, fm, fd] = parts(from), [ty, tm] = parts(to);
+  const unit: Unit = want && unitFits(from, to, want) ? want : autoUnit(from, to);
   const list: Month[] = [];
   const push = (s: string, e: string, label: string, full: string) =>
     list.push({ key: s, from: s < from ? from : s, to: e > to ? to : e, label, full });
@@ -188,6 +205,11 @@ export function buckets(from: string, to: string): { unit: Unit; list: Month[] }
     for (let [y, m] = [fy, fm]; y * 12 + m <= ty * 12 + tm; [y, m] = addMonths(y, m, 1)) {
       const x = monthOf(y, m);
       push(x.from, x.to, x.label + (m === 1 || !list.length ? ` '${String(y).slice(2)}` : ''), x.full);
+    }
+  } else if (unit === 'quarter') {
+    for (let [y, q] = [fy, Math.ceil(fm / 3)]; y * 4 + q <= ty * 4 + Math.ceil(tm / 3); q === 4 ? (y++, q = 1) : q++) {
+      const m = q * 3 - 2;
+      push(ymd(y, m, 1), ymd(y, m + 2, lastDay(y, m + 2)), `Q${q} '${String(y).slice(2)}`, `Q${q} ${y}`);
     }
   } else {
     for (let y = fy; y <= ty; y++) push(ymd(y, 1, 1), ymd(y, 12, 31), String(y), String(y));

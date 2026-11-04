@@ -53,23 +53,55 @@ function axis(els: ReactElement[], max: number, w: number, ih: number, cur: stri
 
 export interface IEMonth extends Month { inc: number; exp: number }
 
+/** Narrowest a period's pair of bars may get; past that the chart scrolls sideways instead. */
+const MIN_GW = 26;
+/** Room for a horizontal scrollbar under a scrolling chart. */
+const SCROLLBAR = 12;
+
 export function ChartIE({ months, w, h }: { months: IEMonth[]; w: number; h: number }) {
   const cur = useLedger().idx.disp;
-  const iw = w - P.l - P.r, ih = h - P.t - P.b;
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const fitW = w - P.l - P.r;
+  const scrolls = fitW / Math.max(1, months.length) < MIN_GW;
+  const gw = scrolls ? MIN_GW : fitW / Math.max(1, months.length);
+  const plotW = gw * months.length + P.r;
+  const ch = scrolls ? h - SCROLLBAR : h;
+  const ih = ch - P.t - P.b;
   const max = niceMax(Math.max(1, ...months.map(m => Math.max(m.inc, m.exp))));
-  const gw = iw / months.length, bw = Math.max(1, Math.min(16, gw * 0.3));
+  const bw = Math.max(1, Math.min(16, gw * 0.3));
   // Label every nth bar so labels never overlap.
   const every = Math.max(1, Math.ceil(46 / gw));
-  const els: ReactElement[] = [];
-  axis(els, max, w, ih, cur);
+
+  // Start at the latest period, and again whenever the range changes.
+  const first = months[0]?.key, n = months.length;
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    if (el) el.scrollLeft = el.scrollWidth;
+  }, [first, n, scrolls]);
+
+  // The amount axis stays put; the grid, bars and labels scroll under it.
+  const axisEls: ReactElement[] = [], els: ReactElement[] = [];
+  for (let i = 0; i <= 4; i++) {
+    const y = P.t + ih - (ih * i) / 4;
+    axisEls.push(<text key={`t${i}`} x={P.l - 8} y={y + 3.5} textAnchor="end" style={TXT}>{fmtK((max * i) / 4, cur)}</text>);
+    els.push(<line key={`g${i}`} x1={0} x2={plotW - P.r} y1={y} y2={y} style={{ stroke: 'var(--line)' }} />);
+  }
   months.forEach((m, i) => {
-    const cx = P.l + i * gw + gw / 2;
+    const cx = i * gw + gw / 2;
     const hi = Math.max(0, (m.inc / max) * ih), he = Math.max(0, (m.exp / max) * ih);
     els.push(<rect key={`i${i}`} x={cx - bw - 1} y={P.t + ih - hi} width={bw} height={hi} rx={2} style={{ fill: 'var(--acc)' }}><title>{`${m.full}: income ${fmt(m.inc, cur)}`}</title></rect>);
     els.push(<rect key={`e${i}`} x={cx + 1} y={P.t + ih - he} width={bw} height={he} rx={2} style={{ fill: 'var(--exp)' }}><title>{`${m.full}: expenses ${fmt(m.exp, cur)}`}</title></rect>);
-    if (i % every === 0) els.push(<text key={`l${i}`} x={cx} y={h - 6} textAnchor="middle" style={LBL}>{m.label}</text>);
+    // Count labels from the latest bar, so the newest period is always labelled.
+    if ((n - 1 - i) % every === 0) els.push(<text key={`l${i}`} x={cx} y={ch - 6} textAnchor="middle" style={LBL}>{m.label}</text>);
   });
-  return <svg viewBox={`0 0 ${w} ${h}`} width="100%" style={{ display: 'block' }}>{els}</svg>;
+  return (
+    <div style={{ display: 'flex', width: w, height: h }}>
+      <svg width={P.l} height={ch} style={{ display: 'block', flex: 'none' }}>{axisEls}</svg>
+      <div ref={scrollRef} className="chart-scroll" style={{ flex: 1, minWidth: 0, overflowX: scrolls ? 'auto' : 'hidden', overflowY: 'hidden' }}>
+        <svg width={plotW} height={ch} style={{ display: 'block' }}>{els}</svg>
+      </div>
+    </div>
+  );
 }
 
 export interface Series { id: number; name: string; color: string; values: number[] }

@@ -127,7 +127,13 @@ export function useRange(key: string, initial: Range) {
 }
 
 /** Button that opens a grid of date ranges, with the chosen range's dates beside it. */
-export function RangePicker({ value, onChange }: { value: Range; onChange: (r: Range) => void }) {
+export function RangePicker({ value, onChange, compact = false, alignRight = false }: {
+  value: Range; onChange: (r: Range) => void;
+  /** For panel headers: a smaller button, with the dates as its tooltip instead of beside it. */
+  compact?: boolean;
+  /** Open the list leftwards, for pickers near the right edge. */
+  alignRight?: boolean;
+}) {
   const { today } = useLedger();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -143,13 +149,14 @@ export function RangePicker({ value, onChange }: { value: Range; onChange: (r: R
   }, [open]);
 
   return (
-    <div className="range" ref={ref}>
-      <button type="button" className="select range-btn" onClick={() => setOpen(o => !o)} aria-expanded={open} aria-haspopup="listbox">
+    <div className={`range${compact ? ' compact' : ''}`} ref={ref}>
+      <button type="button" className="select range-btn" onClick={() => setOpen(o => !o)} aria-expanded={open} aria-haspopup="listbox"
+        title={compact ? rangeLabel(from, to, today) : undefined}>
         {rangeName(value)}
       </button>
-      <span className="muted small">{rangeLabel(from, to, today)}</span>
+      {!compact && <span className="muted small">{rangeLabel(from, to, today)}</span>}
       {open && (
-        <div className="range-pop" role="listbox">
+        <div className={`range-pop${alignRight ? ' right' : ''}`} role="listbox">
           {RANGE_ROWS.map((row, i) => row === 'divider'
             ? <div key={i} className="range-div" />
             : row.map(([k, label]) => (

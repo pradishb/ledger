@@ -245,6 +245,18 @@ input.input[type='date']::-webkit-date-and-time-value { text-align: left; margin
   padding: 4px; background: var(--panel); border: 1px solid var(--line2); border-radius: 8px;
   box-shadow: 0 8px 24px rgb(0 0 0 / 0.14);
 }
+.range-pop.right { left: auto; right: 0; }
+.range.compact .range-btn { height: 26px; min-width: 0; font-size: 12px; }
+.panel-tools { display: flex; align-items: center; gap: 6px; flex: none; }
+.panel-head .t { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.range-btn { white-space: nowrap; }
+.range.compact .range-btn { padding-right: 26px; gap: 6px; background-position: right 7px center; }
+.panel-tools .select.sm { width: auto; padding-right: 22px; }
+.panel-tools .select.sm { height: 26px; font-size: 12px; }
+.chart-scroll { scrollbar-width: thin; scrollbar-color: var(--line2) transparent; }
+.chart-legend { padding: 8px 14px 0; }
+.dash3 .panel { overflow: visible; }
+.dash3 .panel-head { border-radius: 8px 8px 0 0; }
 .range-pop button { padding: 7px 8px; border: 0; border-radius: 5px; background: none; text-align: left; font-size: 12.5px; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .range-pop button:hover { background: var(--hover); }
 .range-pop button.on { background: var(--acc); color: var(--accInk); }
