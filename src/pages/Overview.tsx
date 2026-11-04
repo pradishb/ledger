@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type CSSProperties } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { useLedger } from '../data/context';
 import { api, useLedgerMutation } from '../data/api';
@@ -44,6 +44,8 @@ export function Overview() {
   }
   const spend = [...byTop].map(([id, val]) => ({ c: idx.catMap.get(id)!, val })).filter(x => x.val > 0).sort((a, b) => b.val - a.val);
   const spendMax = spend[0]?.val || 1;
+  // Size the amount column to the longest amount, so big values never run into the percentage.
+  const amtW = Math.max(0, ...spend.map(x => fmt(x.val, idx.disp).length));
 
   // Chart its own range, by the chosen unit; open-ended ranges stop where the transactions do.
   const [cRange, setCRange] = useRange('overview.chart', range);
@@ -132,7 +134,7 @@ export function Overview() {
             </Panel>
 
             <Panel title="Where your money goes" action={<RangePicker compact alignRight value={sRange} onChange={setSRange} />}>
-              <div className="panel-body">
+              <div className="panel-body" style={{ '--amt-w': `${amtW + 1}ch` } as CSSProperties}>
                 {spend.map((x, i) => (
                   <div className="spend-row" key={x.c.id}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>

@@ -118,7 +118,10 @@ input.input[type='date']::-webkit-date-and-time-value { text-align: left; margin
 .dash3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(340px, 100%), 1fr)); gap: 12px; align-items: start; }
 .dash3 .panel { display: flex; flex-direction: column; min-height: 0; }
 .panel-body { flex: 1; min-height: 0; overflow: auto; padding: 2px 0 6px; }
-.dash3 .spend-row { grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) 92px 34px; gap: 10px; }
+.dash3 .spend-row { grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) var(--amt-w, 92px) 36px; gap: 10px; }
+/* ch is measured in the row's font, so set the mono font here too to make --amt-w exact. */
+.dash3 .spend-row { font-family: var(--mono); }
+.dash3 .spend-row .ell { font-family: var(--sans); }
 @media (min-width: 1100px) {
   .content:has(> .stack.dash) { display: flex; flex-direction: column; padding-bottom: 16px; }
   .stack.dash { flex: 1; min-height: 0; }
