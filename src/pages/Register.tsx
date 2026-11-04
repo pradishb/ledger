@@ -9,7 +9,7 @@ import { DataTable } from '../components/data-table';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { amountFor, balColor, describeTxn, sortTxnsAsc } from '../lib/ledger';
-import { fdate, REG_RANGES, regFrom, type RegRange } from '../lib/dates';
+import { fdate, rangeLabel, REG_RANGES, regFrom, type RegRange } from '../lib/dates';
 import { errorMessage, fmt } from '../lib/format';
 import { ACCOUNT_TYPES, PAYMENTS, type Txn } from '../lib/types';
 
@@ -24,6 +24,9 @@ export function Register() {
   const C = Number(params.get('category')) || 0;
   const P = params.has('payee') ? Number(params.get('payee')) || 0 : -1;
   const K = (['exp', 'inc', 'xfer'] as const).find(k => k === params.get('kind')) ?? '';
+  // Exact dates, when a link (a category on Statistics, say) brings its own range.
+  const F = params.get('from') ?? '', T = params.get('to') ?? '';
+  const custom = !!(F || T);
   const setParam = (key: string, v: string) => setParams(prev => {
     const next = new URLSearchParams(prev);
     if (v) next.set(key, v); else next.delete(key);
@@ -52,7 +55,8 @@ export function Register() {
     const cats = C ? new Set([C, ...idx.subsOf(C).map(c => c.id)]) : null;
     const kindOf = (t: Txn) => (t.xfer ? 'xfer' : t.amount < 0 ? 'exp' : 'inc');
     const list = data.txns.filter(t => !A || t.acc === A || t.xfer === A).sort(sortTxnsAsc);
-    const from = regFrom(range, today);
+    const from = custom ? F || '0000' : regFrom(range, today);
+    const to = T || '9999';
     let run = acct?.opening ?? 0;
     let tin = 0, tout = 0;
     const rows: { t: Txn; amt: number; run: number }[] = [];
@@ -60,7 +64,7 @@ export function Register() {
     for (const t of list) {
       const amt = A ? amountFor(t, A) : t.amount;
       run += amt;
-      if (t.date < from) continue;
+      if (t.date < from || t.date > to) continue;
       if (K && kindOf(t) !== K) continue;
       if (P >= 0 && (t.xfer || t.payee !== P)) continue;
       if (cats && !(cats.has(t.cat) || t.splits?.some(s => cats.has(s.cat)))) continue;
@@ -117,7 +121,7 @@ export function Register() {
         cell: ({ row }: { row: { original: Row } }) => fmt(row.original.run, acur) } satisfies ColumnDef<Row, unknown>] : []),
     ];
     return { rows, tableRows, columns, tin, tout, rowCur };
-  }, [data, idx, A, acct, acur, C, K, P, range, today, needle]);
+  }, [data, idx, A, acct, acur, C, K, P, F, T, custom, range, today, needle]);
 
   if (!view) {
     return (
@@ -133,7 +137,7 @@ export function Register() {
   const subtitle = acct
     ? [ACCOUNT_TYPES.find(x => x[0] === acct.type)?.[1], acct.group].filter(Boolean).join(' · ')
     : 'Every account';
-  const anyFilter = !!(A || C || P >= 0 || K || needle);
+  const anyFilter = !!(A || C || P >= 0 || K || custom || needle);
   const shownAccounts = data.accounts.filter(a => !a.hidden).sort((x, y) => x.name.localeCompare(y.name));
   const hiddenAccounts = data.accounts.filter(a => a.hidden).sort((x, y) => x.name.localeCompare(y.name));
   const b = acct ? bal.get(acct.id) : undefined;
@@ -188,7 +192,13 @@ export function Register() {
 
   const filters = <>
     <Input type="search" className="h-8 w-60" value={q} onChange={e => setQ(e.target.value)} placeholder="Search payee, memo, category, amount" aria-label="Search" />
-    <select className="select" value={range} onChange={e => setRange(e.target.value as RegRange)} aria-label="Date range">
+    <select className="select" value={custom ? 'custom' : range} aria-label="Date range"
+      onChange={e => {
+        if (e.target.value === 'custom') return;
+        setRange(e.target.value as RegRange);
+        setParams(prev => { const n = new URLSearchParams(prev); n.delete('from'); n.delete('to'); return n; }, { replace: true });
+      }}>
+      {custom && <option value="custom">{rangeLabel(F || '0000', T || '9999', today)}</option>}
       {REG_RANGES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
     </select>
     <select className="select" value={A > 0 ? A : ''} onChange={e => setParam('account', e.target.value)} aria-label="Account">

@@ -129,6 +129,14 @@ input.input[type='date']::-webkit-date-and-time-value { text-align: left; margin
 .stats-list .spend-row { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.4fr) var(--amt-w, 92px) 48px; gap: 12px; padding: 6px 14px; }
 .stats-list .spend-row.sub { padding-top: 3px; padding-bottom: 3px; background: var(--sunk); }
 .stats-list .spend-row.clickable { cursor: pointer; }
+.spend-row.clickable { cursor: pointer; border-radius: 0; }
+.spend-row.clickable:hover { background: var(--hover); }
+.spend-row.clickable:hover .ell { text-decoration: underline; text-underline-offset: 2px; }
+.expand { display: grid; place-items: center; width: 18px; height: 18px; flex: none; padding: 0; border: 0; border-radius: 4px; background: none; color: var(--ink3); }
+.expand:hover { background: var(--line); color: var(--ink); }
+.expand .chev { margin: 0; }
+.name-link { color: inherit; text-decoration: none; }
+.name-link:hover { color: var(--acc); text-decoration: underline; text-underline-offset: 2px; }
 .stats-list .spend-row:hover { background: var(--hover); }
 /* ch is measured in the row's font, so set the mono font here too to make --amt-w exact. */
 .dash3 .spend-row { font-family: var(--mono); }

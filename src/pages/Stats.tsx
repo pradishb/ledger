@@ -1,17 +1,24 @@
 import { useState, type CSSProperties } from 'react';
 import { useLedger } from '../data/context';
-import { Bar, Dot, Header, Panel, RangePicker, Seg, useRange } from '../components/common';
+import { useNavigate } from 'react-router';
+import { Bar, Chevron, Dot, Header, Panel, RangePicker, Seg, useRange } from '../components/common';
+import { txnsLink } from '../lib/links';
 import { flows } from '../lib/ledger';
 import { rangeDates, rangeName } from '../lib/dates';
 import { fmt } from '../lib/format';
 import { rankColor, type CatType, type Category } from '../lib/types';
 
 interface Row {
-  key: string; name: string; color: string; amount: number; sub: boolean; chev: string; onClick?: () => void;
+  key: string; name: string; color: string; amount: number; sub: boolean;
+  /** Where clicking the row goes: its transactions for this period. */
+  href: string;
+  /** For a category with subcategories: whether they're shown, and how to toggle that. */
+  open?: boolean; toggle?: () => void;
 }
 
 export function Stats() {
   const { data, idx, today } = useLedger();
+  const navigate = useNavigate();
   const [by, setBy] = useState<'cat' | 'payee'>('cat');
   const [type, setType] = useState<CatType>('exp');
   const [period, setPeriod] = useRange('stats', 'lmonth');
@@ -24,6 +31,7 @@ export function Stats() {
   const pct = (x: number) => (total > 0 ? ((x / total) * 100).toFixed(1) + '%' : '—');
 
   const rows: Row[] = [];
+  const link = (f: { category?: number; payee?: number; kind?: CatType }) => txnsLink({ ...f, from, to });
 
   if (by === 'cat') {
     const agg = new Map<number, { c: Category; total: number; subs: Map<number, number> }>();
@@ -41,14 +49,14 @@ export function Stats() {
       const hasSubs = [...g.subs.keys()].some(k => k !== g.c.id);
       const open = !!expanded[g.c.id];
       rows.push({
-        key: `c${g.c.id}`, name: g.c.name, color, amount: g.total, sub: false,
-        chev: hasSubs ? (open ? '▾' : '▸') : '',
-        onClick: hasSubs ? () => setExpanded(p => ({ ...p, [g.c.id]: !p[g.c.id] })) : undefined,
+        key: `c${g.c.id}`, name: g.c.name, color, amount: g.total, sub: false, href: link({ category: g.c.id }),
+        open, toggle: hasSubs ? () => setExpanded(p => ({ ...p, [g.c.id]: !p[g.c.id] })) : undefined,
       });
       if (open) {
         [...g.subs].sort((a, b) => b[1] - a[1]).forEach(([id, val]) => rows.push({
           key: `s${id}`, name: id === g.c.id ? '(no subcategory)' : idx.catMap.get(id)?.name ?? '?',
-          color, amount: val, sub: true, chev: '',
+          // "(no subcategory)" can only link to the parent, which includes its subcategories too.
+          color, amount: val, sub: true, href: link({ category: id }),
         }));
       }
     });
@@ -57,7 +65,7 @@ export function Stats() {
     for (const f of fl) agg.set(f.payee, (agg.get(f.payee) ?? 0) + sg * f.amount);
     const list = [...agg].map(([id, val]) => ({ id, name: idx.payMap.get(id)?.name || '(no payee)', val }))
       .filter(x => x.val !== 0).sort((a, b) => b.val - a.val);
-    list.forEach((x, i) => rows.push({ key: `p${x.id}`, name: x.name, color: rankColor(i), amount: x.val, sub: false, chev: '' }));
+    list.forEach((x, i) => rows.push({ key: `p${x.id}`, name: x.name, color: rankColor(i), amount: x.val, sub: false, href: link({ payee: x.id, kind: type }) }));
   }
   const mx = Math.max(1, ...rows.filter(r => !r.sub).map(r => r.amount));
   // Size the amount column to the longest amount, so millions never run into the share.
@@ -83,9 +91,14 @@ export function Stats() {
               </span>}>
               <div className="panel-body stats-list" style={{ '--amt-w': `${amtW + 1}ch` } as CSSProperties}>
                 {rows.map(r => (
-                  <div key={r.key} className={`spend-row${r.sub ? ' sub' : ''}${r.onClick ? ' clickable' : ''}`} onClick={r.onClick}>
+                  <div key={r.key} className={`spend-row clickable${r.sub ? ' sub' : ''}`} onClick={() => navigate(r.href)} title={`Show ${r.name} transactions`}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, paddingLeft: r.sub ? 26 : 0 }}>
-                      <span style={{ width: 10, flex: 'none', color: 'var(--ink3)', fontSize: 10 }}>{r.chev}</span>
+                      {r.toggle ? (
+                        <button type="button" className="expand" aria-expanded={r.open} aria-label={r.open ? 'Hide subcategories' : 'Show subcategories'}
+                          onClick={e => { e.stopPropagation(); r.toggle!(); }}>
+                          <Chevron open={!!r.open} />
+                        </button>
+                      ) : <span style={{ width: 18, flex: 'none' }} />}
                       {!r.sub && <Dot color={r.color} />}
                       <span className="ell" style={{ fontWeight: r.sub ? 400 : 500, color: r.sub ? 'var(--ink2)' : 'var(--ink)' }}>{r.name}</span>
                     </div>

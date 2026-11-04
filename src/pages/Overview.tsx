@@ -8,6 +8,7 @@ import { accountGroups, balColor, flows, sumType, type GroupBy } from '../lib/le
 import { autoUnit, buckets, longDate, rangeDates, rangeName, unitFits, UNIT_NAME, UNITS, type Unit } from '../lib/dates';
 import { errorMessage, fmt, fmt0 } from '../lib/format';
 import { rankColor } from '../lib/types';
+import { txnsLink } from '../lib/links';
 
 export function Overview() {
   const { data, idx, bal, today, netWorth, online, toast } = useLedger();
@@ -157,7 +158,8 @@ export function Overview() {
             <Panel title="Where your money goes" action={<RangePicker compact alignRight value={sRange} onChange={setSRange} />}>
               <div className="panel-body" style={{ '--amt-w': `${amtW + 1}ch` } as CSSProperties}>
                 {spend.map((x, i) => (
-                  <div className="spend-row" key={x.c.id}>
+                  <div className="spend-row clickable" key={x.c.id} title={`Show ${x.c.name} transactions`}
+                    onClick={() => navigate(txnsLink({ category: x.c.id, from: sFrom, to: sTo }))}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
                       <Dot color={rankColor(i)} />
                       <span className="ell">{x.c.name}</span>

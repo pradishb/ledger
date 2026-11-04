@@ -1,8 +1,10 @@
+import { Link } from 'react-router';
 import { useState } from 'react';
 import { useLedger } from '../data/context';
 import { api, useLedgerMutation } from '../data/api';
 import { Dot, Header, Seg } from '../components/common';
 import { rangeDates } from '../lib/dates';
+import { txnsLink } from '../lib/links';
 import { errorMessage, fmt } from '../lib/format';
 import { OTHER, PALETTE, PAYMENTS, type CatType } from '../lib/types';
 
@@ -109,7 +111,7 @@ export function CategoriesPayees() {
                     const color = c.color ?? OTHER;
                     return [
                       <tr className="group" key={c.id}>
-                        <td><span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}><Dot color={color} /><b style={{ fontWeight: 600 }}>{c.name}</b></span></td>
+                        <td><span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}><Dot color={color} /><Link className="name-link" style={{ fontWeight: 600 }} to={txnsLink({ category: c.id })}>{c.name}</Link></span></td>
                         <td className="num hide-m" style={{ color: 'var(--ink2)' }}>{tc}</td>
                         <td className="num" style={{ fontWeight: 600, color: tt ? (catType === 'exp' ? 'var(--out)' : 'var(--inc)') : 'var(--ink3)' }}>{fmt(tt, idx.disp)}</td>
                         <td className="num hide-m" style={{ color: 'var(--ink2)' }}>{fmt(Math.round(tt / 12), idx.disp)}</td>
@@ -119,7 +121,7 @@ export function CategoriesPayees() {
                         const n = cnt.get(x.id) ?? 0, sv = sg * (tot.get(x.id) ?? 0);
                         return (
                           <tr key={x.id}>
-                            <td style={{ paddingLeft: 38 }}>{x.name}</td>
+                            <td style={{ paddingLeft: 38 }}><Link className="name-link" to={txnsLink({ category: x.id })}>{x.name}</Link></td>
                             <td className="num hide-m" style={{ color: 'var(--ink2)' }}>{n}</td>
                             <td className="num" style={{ color: sv ? (catType === 'exp' ? 'var(--out)' : 'var(--inc)') : 'var(--ink3)', opacity: 0.8 }}>{fmt(sv, idx.disp)}</td>
                             <td className="num hide-m" style={{ color: 'var(--ink2)' }}>{fmt(Math.round(sv / 12), idx.disp)}</td>
@@ -161,7 +163,7 @@ export function CategoriesPayees() {
                       const used = pcnt.get(p.id) ?? 0;
                       return (
                         <tr key={p.id}>
-                          <td className="ell">{p.name}</td>
+                          <td className="ell"><Link className="name-link" to={txnsLink({ payee: p.id })}>{p.name}</Link></td>
                           <td>
                             <select className="select" style={{ width: '100%', height: 26, fontSize: 12 }} value={p.defCat} disabled={!online}
                               onChange={e => run(updPayee, { id: p.id, defCat: +e.target.value })}>
