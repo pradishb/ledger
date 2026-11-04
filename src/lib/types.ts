@@ -77,6 +77,13 @@ export const PALETTE = [
   'oklch(0.56 0.09 155)', 'oklch(0.72 0.13 80)', 'oklch(0.6 0.11 245)', 'oklch(0.64 0.14 30)',
   'oklch(0.58 0.13 305)', 'oklch(0.65 0.1 195)', 'oklch(0.7 0.12 120)', 'oklch(0.62 0.12 355)',
 ];
+
+/**
+ * Colour for the nth-biggest item in a ranked list. Hues step by the golden angle, so every item
+ * gets its own colour and neighbours are always far apart; lightness also varies to separate them.
+ */
+export const rankColor = (i: number) =>
+  `oklch(${[0.64, 0.74, 0.56][i % 3]} 0.13 ${Math.round((25 + i * 137.508) % 360)})`;
 export const OTHER = 'oklch(0.62 0.01 150)';
 
 /** Offered on first run so a new account isn't empty. */

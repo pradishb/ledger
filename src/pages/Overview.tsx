@@ -2,10 +2,11 @@ import { Link, useNavigate } from 'react-router';
 import { useLedger } from '../data/context';
 import { api, useLedgerMutation } from '../data/api';
 import { Bar, Chevron, DisplayCurrency, Dot, Header, Panel, RangePicker, useOpenGroups, useRange } from '../components/ui';
-import { ChartIE, Donut, SizedBox } from '../components/Charts';
+import { ChartIE, SizedBox } from '../components/Charts';
 import { accountGroups, balColor, flows, sumType } from '../lib/ledger';
 import { buckets, longDate, rangeDates, rangeName, UNIT_NAME } from '../lib/dates';
 import { errorMessage, fmt, fmt0 } from '../lib/format';
+import { rankColor } from '../lib/types';
 
 export function Overview() {
   const { data, idx, bal, today, netWorth, online, toast } = useLedger();
@@ -37,11 +38,6 @@ export function Overview() {
   }
   const spend = [...byTop].map(([id, val]) => ({ c: idx.catMap.get(id)!, val })).filter(x => x.val > 0).sort((a, b) => b.val - a.val);
   const spendMax = spend[0]?.val || 1;
-  // Keep the panel short: the biggest categories, then everything else on one line.
-  const TOP = 6;
-  const spendTop = spend.length > TOP + 1 ? spend.slice(0, TOP) : spend;
-  const rest = spend.slice(spendTop.length);
-  const restVal = rest.reduce((a, x) => a + x.val, 0);
 
   // Chart the selected range; open-ended ranges stop where the transactions do.
   let first = today, last = today;
@@ -125,37 +121,17 @@ export function Overview() {
 
             <Panel title={`Where your money goes · ${rl}`} action={<Link className="link" to="/stats">Statistics</Link>}>
               <div className="panel-body">
-                {spend.length > 0 && (
-                  <div className="donut-wrap">
-                    <Donut size={150} segs={[
-                      ...spendTop.map(x => ({ name: x.c.name, value: x.val, color: x.c.color ?? 'var(--ink3)' })),
-                      ...(restVal ? [{ name: 'Other', value: restVal, color: 'var(--line2)' }] : []),
-                    ]} />
-                    <div className="donut-mid"><span className="muted">Total</span><b className="mono">{fmt0(exp, idx.disp)}</b></div>
-                  </div>
-                )}
-                {spendTop.map(x => (
+                {spend.map((x, i) => (
                   <div className="spend-row" key={x.c.id}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-                      <Dot color={x.c.color ?? 'var(--ink3)'} />
+                      <Dot color={rankColor(i)} />
                       <span className="ell">{x.c.name}</span>
                     </div>
-                    <Bar width={(x.val / spendMax) * 100} color={x.c.color ?? 'var(--ink3)'} />
+                    <Bar width={(x.val / spendMax) * 100} color={rankColor(i)} />
                     <div className="r mono" style={{ fontSize: 12 }}>{fmt(x.val, idx.disp)}</div>
                     <div className="r mono muted" style={{ fontSize: 11.5 }}>{exp ? Math.round((x.val / exp) * 100) : 0}%</div>
                   </div>
                 ))}
-                {rest.length > 0 && (
-                  <Link className="spend-row spend-other" to="/stats">
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-                      <Dot color="var(--line2)" />
-                      <span className="ell">Other {rest.length} categories</span>
-                    </div>
-                    <Bar width={(restVal / spendMax) * 100} color="var(--line2)" />
-                    <div className="r mono" style={{ fontSize: 12 }}>{fmt(restVal, idx.disp)}</div>
-                    <div className="r mono muted" style={{ fontSize: 11.5 }}>{exp ? Math.round((restVal / exp) * 100) : 0}%</div>
-                  </Link>
-                )}
                 {!spend.length && <div className="empty">No spending in this period.</div>}
               </div>
             </Panel>

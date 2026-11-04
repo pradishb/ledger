@@ -5,7 +5,7 @@ import { Donut, type Seg as DonutSeg } from '../components/Charts';
 import { flows } from '../lib/ledger';
 import { rangeDates, rangeName } from '../lib/dates';
 import { fmt } from '../lib/format';
-import { OTHER, PALETTE, type CatType, type Category } from '../lib/types';
+import { OTHER, PALETTE, rankColor, type CatType, type Category } from '../lib/types';
 
 interface Row {
   key: string; name: string; color: string; amount: number; sub: boolean; chev: string; onClick?: () => void;
@@ -38,8 +38,8 @@ export function Stats() {
       g.subs.set(f.cat, (g.subs.get(f.cat) ?? 0) + sg * f.amount);
     }
     const list = [...agg.values()].filter(g => g.total !== 0).sort((a, b) => b.total - a.total);
-    for (const g of list) {
-      const color = g.c.color ?? OTHER;
+    list.forEach((g, i) => {
+      const color = rankColor(i);
       const hasSubs = [...g.subs.keys()].some(k => k !== g.c.id);
       const open = !!expanded[g.c.id];
       rows.push({
@@ -53,8 +53,8 @@ export function Stats() {
           color, amount: val, sub: true, chev: '',
         }));
       }
-    }
-    segs = list.filter(g => g.total > 0).map(g => ({ name: g.c.name, value: g.total, color: g.c.color ?? OTHER }));
+    });
+    segs = list.map((g, i) => ({ name: g.c.name, value: g.total, color: rankColor(i) })).filter(x => x.value > 0);
   } else {
     const agg = new Map<number, number>();
     for (const f of fl) agg.set(f.payee, (agg.get(f.payee) ?? 0) + sg * f.amount);
