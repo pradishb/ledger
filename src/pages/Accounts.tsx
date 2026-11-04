@@ -17,7 +17,7 @@ export function Accounts() {
   const [opening, setOpening] = useState('');
 
   const groups = accountGroups(data.accounts, bal);
-  const total = (f: 'today' | 'future') => sumBy(data.accounts, a => bal.get(a.id)?.[f] ?? 0);
+  const total = sumBy(data.accounts, a => bal.get(a.id) ?? 0);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -53,8 +53,7 @@ export function Accounts() {
               <tr>
                 <th>Account</th>
                 <th className="hide-m">Institution</th>
-                <th className="r">Today</th>
-                <th className="r">Future</th>
+                <th className="r">Balance</th>
               </tr>
             </thead>
             <tbody>
@@ -62,17 +61,15 @@ export function Accounts() {
                 <tr className="group" key={g.label}>
                   <td style={{ fontWeight: 600, color: 'var(--ink2)', fontSize: 11.5, paddingTop: 6, paddingBottom: 6 }}>{g.label}</td>
                   <td className="hide-m" />
-                  <td className="num" style={{ fontWeight: 600, color: balColor(g.today) }}>{fmt(g.today)}</td>
-                  <td className="num" style={{ fontWeight: 600, color: balColor(g.future) }}>{fmt(g.future)}</td>
+                  <td className="num" style={{ fontWeight: 600, color: balColor(g.balance) }}>{fmt(g.balance)}</td>
                 </tr>,
                 ...g.accounts.map(a => {
-                  const b = bal.get(a.id) ?? { today: 0, future: 0 };
+                  const b = bal.get(a.id) ?? 0;
                   return (
                     <tr className="clickable" key={a.id} onClick={() => navigate(`/accounts/${a.id}`)}>
                       <td style={{ paddingLeft: 28, paddingTop: 6, paddingBottom: 6 }}>{a.name}</td>
                       <td className="small muted hide-m">{a.institution}</td>
-                      <td className="num" style={{ color: balColor(b.today) }}>{fmt(b.today)}</td>
-                      <td className="num" style={{ color: balColor(b.future) }}>{fmt(b.future)}</td>
+                      <td className="num" style={{ color: balColor(b) }}>{fmt(b)}</td>
                     </tr>
                   );
                 }),
@@ -81,8 +78,7 @@ export function Accounts() {
                 <tr className="group">
                   <td style={{ fontWeight: 600, paddingTop: 6, paddingBottom: 6 }}>Net worth</td>
                   <td className="hide-m" />
-                  <td className="num" style={{ fontWeight: 600, color: balColor(total('today')) }}>{fmt(total('today'))}</td>
-                  <td className="num" style={{ fontWeight: 600, color: balColor(total('future')) }}>{fmt(total('future'))}</td>
+                  <td className="num" style={{ fontWeight: 600, color: balColor(total) }}>{fmt(total)}</td>
                 </tr>
               )}
             </tbody>

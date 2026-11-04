@@ -14,7 +14,7 @@ export function Overview() {
 
   const fl30 = flows(data.txns, addDays(today, -30), today);
   const inc = sumType(fl30, 'inc', idx), exp = sumType(fl30, 'exp', idx);
-  const assets = data.accounts.reduce((a, x) => a + Math.max(0, bal.get(x.id)?.today ?? 0), 0);
+  const assets = data.accounts.reduce((a, x) => a + Math.max(0, bal.get(x.id) ?? 0), 0);
 
   const kpis = [
     { label: 'Net worth', value: fmt(netWorth), sub: `${fmt0(assets)} assets · ${fmt0(assets - netWorth)} owed`, color: 'var(--ink)' },
@@ -86,10 +86,10 @@ export function Overview() {
                   {accountGroups(data.accounts, bal).map(g => [
                     <tr className="group" key={g.label}>
                       <td style={{ fontWeight: 600, color: 'var(--ink2)', fontSize: 11.5 }}>{g.label}</td>
-                      <td className="num" style={{ fontWeight: 600, color: balColor(g.today) }}>{fmt(g.today)}</td>
+                      <td className="num" style={{ fontWeight: 600, color: balColor(g.balance) }}>{fmt(g.balance)}</td>
                     </tr>,
                     ...g.accounts.map(a => {
-                      const b = bal.get(a.id)?.today ?? 0;
+                      const b = bal.get(a.id) ?? 0;
                       return (
                         <tr className="clickable" key={a.id} onClick={() => navigate(`/accounts/${a.id}`)}>
                           <td style={{ paddingLeft: 28 }}>{a.name}</td>

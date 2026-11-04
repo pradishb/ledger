@@ -72,7 +72,7 @@ export function Layout({ onSignOut }: { onSignOut: () => void }) {
     );
   }
 
-  const netWorth = sumBy(data.accounts, a => bal.get(a.id)?.today ?? 0);
+  const netWorth = sumBy(data.accounts, a => bal.get(a.id) ?? 0);
   const ctx: LedgerCtx = {
     data, idx, bal, netWorth, today, online, isMobile, theme, setTheme,
     openAdd, openEdit, toast, signOut: onSignOut,
@@ -94,7 +94,7 @@ export function Layout({ onSignOut }: { onSignOut: () => void }) {
           </div>
           <div className="side-accts">
             {data.accounts.map(a => {
-              const b = bal.get(a.id)?.today ?? 0;
+              const b = bal.get(a.id) ?? 0;
               return (
                 <NavLink key={a.id} to={`/accounts/${a.id}`} className={({ isActive }) => `navbtn${isActive ? ' active' : ''}`}>
                   <span className="ell">{a.name}</span>

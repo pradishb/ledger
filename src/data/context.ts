@@ -1,12 +1,12 @@
 import { createContext, useContext } from 'react';
-import type { Balance, Index } from '../lib/ledger';
+import type { Index } from '../lib/ledger';
 import type { LedgerData, Txn } from '../lib/types';
 import type { Theme } from './hooks';
 
 export interface LedgerCtx {
   data: LedgerData;
   idx: Index;
-  bal: Map<number, Balance>;
+  bal: Map<number, number>;
   netWorth: number;
   today: string;
   online: boolean;

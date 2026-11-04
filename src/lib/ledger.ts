@@ -24,23 +24,17 @@ export function buildIndex(d: LedgerData) {
 }
 export type Index = ReturnType<typeof buildIndex>;
 
-export interface Balance {
-  today: number;
-  future: number;
-}
-
+/** Balance per account as of today; future-dated transactions are left out. */
 export function balances(d: LedgerData, today: string) {
-  const bal = new Map<number, Balance>();
-  for (const a of d.accounts) bal.set(a.id, { today: a.opening, future: a.opening });
-  const apply = (id: number, amt: number, date: string) => {
-    const b = bal.get(id);
-    if (!b) return;
-    b.future += amt;
-    if (date <= today) b.today += amt;
+  const bal = new Map<number, number>();
+  for (const a of d.accounts) bal.set(a.id, a.opening);
+  const apply = (id: number, amt: number) => {
+    if (bal.has(id)) bal.set(id, bal.get(id)! + amt);
   };
   for (const t of d.txns) {
-    apply(t.acc, t.amount, t.date);
-    if (t.xfer) apply(t.xfer, -t.amount, t.date);
+    if (t.date > today) continue;
+    apply(t.acc, t.amount);
+    if (t.xfer) apply(t.xfer, -t.amount);
   }
   return bal;
 }
@@ -72,19 +66,17 @@ export const sumBy = <T>(list: T[], f: (x: T) => number) => list.reduce((a, x) =
 export interface AccountGroup {
   label: string;
   accounts: Account[];
-  today: number;
-  future: number;
+  balance: number;
 }
 
-export function accountGroups(accounts: Account[], bal: Map<number, Balance>): AccountGroup[] {
+export function accountGroups(accounts: Account[], bal: Map<number, number>): AccountGroup[] {
   return ACCOUNT_TYPES.flatMap(([type, label]) => {
     const list = accounts.filter(a => a.type === type);
     if (!list.length) return [];
     return [{
       label,
       accounts: list,
-      today: sumBy(list, a => bal.get(a.id)?.today ?? 0),
-      future: sumBy(list, a => bal.get(a.id)?.future ?? 0),
+      balance: sumBy(list, a => bal.get(a.id) ?? 0),
     }];
   });
 }

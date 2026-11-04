@@ -80,14 +80,10 @@ export function Register() {
               {REG_RANGES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
             </select>
             <div className="spacer" />
-            {b && (
-              <div style={{ display: 'flex', gap: 18, fontSize: 11.5, color: 'var(--ink3)' }}>
-                {([['Today', b.today], ['Future', b.future]] as const).map(([l, n]) => (
-                  <span key={l} style={{ display: 'flex', gap: 6, alignItems: 'baseline' }}>
-                    {l}<span className="mono" style={{ fontSize: 12.5, color: balColor(n), fontWeight: 500 }}>{fmt(n)}</span>
-                  </span>
-                ))}
-              </div>
+            {b !== undefined && (
+              <span style={{ display: 'flex', gap: 6, alignItems: 'baseline', fontSize: 11.5, color: 'var(--ink3)' }}>
+                Balance<span className="mono" style={{ fontSize: 12.5, color: balColor(b), fontWeight: 500 }}>{fmt(b)}</span>
+              </span>
             )}
           </div>
 
