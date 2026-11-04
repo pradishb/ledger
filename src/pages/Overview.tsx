@@ -70,9 +70,20 @@ export function Overview() {
       <tr className="clickable" key={a.id} onClick={() => navigate(`/accounts/${a.id}`)}>
         <td style={{ paddingLeft: 28 }}>{a.name}</td>
         <td className="num" style={{ color: balColor(b) }}>{fmt(b, idx.accCur(a.id))}</td>
+        <td />
       </tr>
     );
   });
+
+  // A group's share: of everything you own if it's positive, of everything you owe if negative,
+  // so each side adds up to 100% and debts don't skew the assets.
+  const groups = accountGroups(data.accounts.filter(a => !a.hidden), bal, idx, groupBy);
+  const owned = groups.reduce((t, g) => t + Math.max(0, g.balance), 0);
+  const owed = groups.reduce((t, g) => t + Math.max(0, -g.balance), 0);
+  const share = (b: number) => {
+    const base = b >= 0 ? owned : owed;
+    return base ? Math.round((Math.abs(b) / base) * 100) : 0;
+  };
 
   const needsSetup = !data.accounts.length || !data.cats.length;
 
@@ -123,12 +134,15 @@ export function Overview() {
               <div className="panel-body">
               <table className="tbl">
                 <tbody>
-                  {accountGroups(data.accounts.filter(a => !a.hidden), bal, idx, groupBy).map(g => [
+                  {groups.map(g => [
                     <tr className="group toggle" key={g.key} onClick={() => toggle(g.key)} aria-expanded={isOpen(g.key)}>
                       <td style={{ fontWeight: 600, color: 'var(--ink2)', fontSize: 11.5 }}>
                         <Chevron open={isOpen(g.key)} />{g.label} <span className="muted" style={{ fontWeight: 400 }}>· {g.accounts.length}</span>
                       </td>
                       <td className="num" style={{ fontWeight: 600, color: balColor(g.balance) }}>{fmt(g.balance, idx.disp)}</td>
+                      <td className="num muted grp-pct" title={g.balance >= 0 ? 'Share of what you own' : 'Share of what you owe'}>
+                        {g.balance ? `${share(g.balance)}%` : ''}
+                      </td>
                     </tr>,
                     ...(isOpen(g.key) ? groupRows(g.accounts) : []),
                   ])}

@@ -282,6 +282,7 @@ input.input[type='date']::-webkit-date-and-time-value { text-align: left; margin
 .panel-tools .seg { padding: 1px; border-color: var(--line2); }
 .panel-tools .seg button { height: 22px; padding: 0 9px; }
 .chart-scroll { scrollbar-width: thin; scrollbar-color: var(--line2) transparent; }
+.tbl td.grp-pct { width: 48px; padding-left: 4px; font-size: 11.5px; font-weight: 400; }
 .chart-legend { padding: 8px 14px 0; }
 .dash3 .panel { overflow: visible; }
 .dash3 .panel-head { border-radius: 8px 8px 0 0; }
