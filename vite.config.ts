@@ -14,7 +14,8 @@ export default defineConfig({
         description: 'Personal finance tracker',
         theme_color: '#2f6b4a',
         background_color: '#f4f5f2',
-        display: 'standalone',
+        display: 'fullscreen',
+        display_override: ['fullscreen', 'standalone'],
         start_url: '/',
         icons: [
           { src: 'pwa-64x64.png', sizes: '64x64', type: 'image/png' },
