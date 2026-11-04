@@ -1,0 +1,11 @@
+// Cloudflare Workers static-assets deploy: `npm run deploy`.
+{
+  "name": "ledger",
+  "compatibility_date": "2026-09-26",
+  "assets": {
+    "directory": "./dist",
+    // Client-side routes (/accounts, /stats, ...) fall back to index.html.
+    "not_found_handling": "single-page-application"
+  },
+  "routes": [{ "pattern": "ledger.pradish.com.np", "custom_domain": true }]
+}

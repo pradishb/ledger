@@ -21,12 +21,16 @@ Ported from the Claude Design file `Finance Tracker.dc.html`.
 
 ## Deploy (needed for the phone)
 
-A PWA needs HTTPS. Any static host works, for example Vercel, Netlify or Cloudflare Pages:
+A PWA needs HTTPS. This app is deployed as a Cloudflare Worker that serves static files, at
+https://ledger.pradish.com.np (set in `wrangler.jsonc`):
 
-- Build command `npm run build`, output directory `dist`
-- Set the same `VITE_*` environment variables in the host
-- Make every path fall back to `/index.html` (SPA routing). Vercel and Netlify need a rewrite rule. On
-  Cloudflare Pages this works by default.
+```sh
+npx wrangler login   # once
+npm run deploy       # builds with your local .env, then uploads dist/
+```
+
+The `VITE_*` values are built into the bundle, so deploy from a machine that has `.env`. Paths like
+`/accounts` fall back to `index.html` through `not_found_handling`.
 
 Install on the phone:
 - **iPhone:** open the site in Safari → Share → *Add to Home Screen*.
