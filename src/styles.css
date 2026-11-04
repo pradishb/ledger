@@ -157,6 +157,7 @@ input.input[type='date']::-webkit-date-and-time-value { text-align: left; margin
 .legend { display: flex; gap: 14px; font-size: 11.5px; color: var(--ink2); }
 .legend span { display: flex; align-items: center; gap: 6px; }
 .chip { display: flex; align-items: center; gap: 6px; height: 24px; padding: 0 9px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); font-size: 11.5px; color: var(--ink2); }
+.chip-all { border-style: dashed; color: var(--acc); font-weight: 500; }
 .onboard { padding: 18px; display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
 .onboard p { margin: 0; color: var(--ink2); }
 

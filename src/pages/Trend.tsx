@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useState, type MouseEvent, type ReactNode } from 'react';
 import { useLedger } from '../data/context';
 import { Dot, Header, RangePicker, Seg, useRange } from '../components/common';
 import { ChartIE, ChartStack, Sized, type Series } from '../components/Charts';
@@ -8,7 +8,7 @@ import { fmt0 } from '../lib/format';
 import { OTHER } from '../lib/types';
 
 interface Cell { v: string; color: string }
-interface Row { name: string; color: string; cells: Cell[]; total: string; avg: string; totColor: string; weight: number; op: number }
+interface Row { name: string; color: string; cells: Cell[]; total: string; avg: string; totColor: string; weight: number; op: number; onClick?: (e: MouseEvent) => void }
 
 export function Trend() {
   const { data, idx, today } = useLedger();
@@ -35,7 +35,7 @@ export function Trend() {
   const cell = (c: number, color = 'var(--ink)'): Cell => ({ v: Math.abs(c) < 50 ? '–' : fmt0(c, idx.disp), color });
 
   let rows: Row[];
-  let legend: { key: string; name: string; color: string; op: number; onClick?: () => void }[];
+  let legend: { key: string; name: string; color: string; op: number; onClick?: (e: MouseEvent) => void }[];
   let chart: (w: number) => ReactNode;
 
   if (mode === 'ie') {
@@ -59,14 +59,19 @@ export function Trend() {
       values: mfl.map(fl => fl.reduce((a, f) => (idx.topOf(f.cat)?.id === c.id ? a - f.amount : a), 0)),
     })).filter(x => x.values.some(y => y !== 0));
     const shown = series.filter(x => !hidden[x.id]);
+    // Click: show only this category (or, if it's already the only one, show them all again).
+    // Ctrl/Cmd/Shift-click: add or remove just this one.
+    const pick = (id: number) => (e: MouseEvent) => {
+      if (e.ctrlKey || e.metaKey || e.shiftKey) return setHidden(h => ({ ...h, [id]: !h[id] }));
+      const alone = shown.length === 1 && shown[0].id === id;
+      setHidden(alone ? {} : Object.fromEntries(series.filter(x => x.id !== id).map(x => [x.id, true])));
+    };
     chart = w => <ChartStack months={months} series={shown} w={w} h={220} />;
-    legend = series.map(x => ({
-      key: String(x.id), name: x.name, color: x.color, op: hidden[x.id] ? 0.4 : 1,
-      onClick: () => setHidden(h => ({ ...h, [x.id]: !h[x.id] })),
-    }));
+    legend = series.map(x => ({ key: String(x.id), name: x.name, color: x.color, op: hidden[x.id] ? 0.4 : 1, onClick: pick(x.id) }));
+    if (shown.length < series.length) legend.unshift({ key: 'all', name: 'Show all', color: 'transparent', op: 1, onClick: () => setHidden({}) });
     rows = series.map(x => ({
       name: x.name, color: x.color, cells: x.values.map(y => cell(y)), total: fmt0(T(x.values), idx.disp), avg: fmt0(T(x.values) / N, idx.disp),
-      totColor: 'var(--ink)', weight: 400, op: hidden[x.id] ? 0.4 : 1,
+      totColor: 'var(--ink)', weight: 400, op: hidden[x.id] ? 0.4 : 1, onClick: pick(x.id),
     }));
     const tot = months.map((_, i) => shown.reduce((a, x) => a + x.values[i], 0));
     rows.push({ name: 'Total shown', color: 'transparent', cells: tot.map(y => cell(y)), total: fmt0(T(tot), idx.disp), avg: fmt0(T(tot) / N, idx.disp), totColor: 'var(--ink)', weight: 600, op: 1 });
@@ -91,10 +96,12 @@ export function Trend() {
           <div className="panel">
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '10px 14px', borderBottom: '1px solid var(--line)' }}>
               {legend.map(l => (
-                <button key={l.key} className="chip" onClick={l.onClick} style={{ opacity: l.op, cursor: l.onClick ? 'pointer' : 'default' }}>
-                  <Dot color={l.color} />{l.name}
+                <button key={l.key} className={`chip${l.key === 'all' ? ' chip-all' : ''}`} onClick={l.onClick} style={{ opacity: l.op, cursor: l.onClick ? 'pointer' : 'default' }}
+                  title={mode === 'cat' && l.key !== 'all' ? 'Click to show only this · Ctrl-click to add or remove' : undefined}>
+                  {l.key !== 'all' && <Dot color={l.color} />}{l.name}
                 </button>
               ))}
+              {mode === 'cat' && <span className="muted" style={{ fontSize: 11.5, alignSelf: 'center', marginLeft: 4 }}>Click a category to show only it · Ctrl-click to add or remove</span>}
             </div>
             <div style={{ padding: '14px 12px 8px' }}><Sized>{chart}</Sized></div>
           </div>
@@ -113,7 +120,7 @@ export function Trend() {
               </thead>
               <tbody>
                 {rows.map(r => (
-                  <tr key={r.name} style={{ opacity: r.op }}>
+                  <tr key={r.name} style={{ opacity: r.op, cursor: r.onClick ? 'pointer' : undefined }} onClick={r.onClick}>
                     <td style={{ ...sticky, whiteSpace: 'nowrap', fontWeight: r.weight }}>
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7 }}><Dot color={r.color} />{r.name}</span>
                     </td>
