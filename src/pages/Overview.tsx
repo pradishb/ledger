@@ -1,10 +1,10 @@
 import { Link, useNavigate } from 'react-router';
 import { useLedger } from '../data/context';
 import { api, useLedgerMutation } from '../data/api';
-import { Bar, Chevron, DisplayCurrency, Dot, Header, Panel, useOpenGroups } from '../components/ui';
+import { Bar, Chevron, DisplayCurrency, Dot, Header, Panel, RangePicker, useOpenGroups, useRange } from '../components/ui';
 import { ChartIE, Sized } from '../components/Charts';
 import { accountGroups, balColor, describeTxn, flows, sumType } from '../lib/ledger';
-import { addDays, fdate, longDate, monthsBack } from '../lib/dates';
+import { buckets, fdate, longDate, rangeDates, rangeName, UNIT_NAME } from '../lib/dates';
 import { errorMessage, fmt, fmt0 } from '../lib/format';
 
 export function Overview() {
@@ -13,7 +13,10 @@ export function Overview() {
   const { isOpen, toggle } = useOpenGroups();
   const seed = useLedgerMutation(api.seedCategories);
 
-  const fl30 = flows(data.txns, addDays(today, -30), today, idx);
+  const [range, setRange] = useRange('overview', 'l30');
+  const [rFrom, rTo] = rangeDates(range, today);
+  const rl = rangeName(range);
+  const fl30 = flows(data.txns, rFrom, rTo, idx);
   const inc = sumType(fl30, 'inc', idx), exp = sumType(fl30, 'exp', idx);
   const assets = data.accounts.reduce((a, x) => a + Math.max(0, idx.toDisp(x.id, bal.get(x.id) ?? 0)), 0);
 
@@ -21,9 +24,9 @@ export function Overview() {
     { label: 'Net worth', value: fmt(netWorth, idx.disp), sub: idx.unrated.length
       ? `${idx.unrated.join(', ')} left out: no exchange rate`
       : `${fmt0(assets, idx.disp)} assets · ${fmt0(assets - netWorth, idx.disp)} owed`, color: 'var(--ink)' },
-    { label: 'Income, last 30 days', value: fmt(inc, idx.disp), sub: 'Transfers excluded', color: 'var(--pos)' },
-    { label: 'Spending, last 30 days', value: fmt(exp, idx.disp), sub: `${fl30.filter(f => idx.catType(f.cat) === 'exp').length} entries`, color: 'var(--ink)' },
-    { label: 'Saved, last 30 days', value: fmt(inc - exp, idx.disp), sub: inc ? `${Math.round(((inc - exp) / inc) * 100)}% of income` : '—', color: balColor(inc - exp) },
+    { label: `Income · ${rl}`, value: fmt(inc, idx.disp), sub: 'Transfers excluded', color: 'var(--pos)' },
+    { label: `Spending · ${rl}`, value: fmt(exp, idx.disp), sub: `${fl30.filter(f => idx.catType(f.cat) === 'exp').length} entries`, color: 'var(--ink)' },
+    { label: `Saved · ${rl}`, value: fmt(inc - exp, idx.disp), sub: inc ? `${Math.round(((inc - exp) / inc) * 100)}% of income` : '—', color: balColor(inc - exp) },
   ];
 
   const byTop = new Map<number, number>();
@@ -35,7 +38,12 @@ export function Overview() {
   const spend = [...byTop].map(([id, val]) => ({ c: idx.catMap.get(id)!, val })).filter(x => x.val > 0).sort((a, b) => b.val - a.val);
   const spendMax = spend[0]?.val || 1;
 
-  const months = monthsBack(6, today).map(m => {
+  // Chart the selected range; open-ended ranges stop where the transactions do.
+  let first = today, last = today;
+  for (const t of data.txns) { if (t.date < first) first = t.date; if (t.date > last) last = t.date; }
+  const cFrom = rFrom < first ? first : rFrom, cTo = rTo > last ? last : rTo;
+  const chart = cFrom <= cTo ? buckets(cFrom, cTo) : buckets(rFrom, rTo);
+  const months = chart.list.map(m => {
     const fl = flows(data.txns, m.from, m.to, idx);
     return { ...m, inc: sumType(fl, 'inc', idx), exp: sumType(fl, 'exp', idx) };
   });
@@ -71,6 +79,8 @@ export function Overview() {
               )}
             </div>
           )}
+
+          <div className="toolbar"><RangePicker value={range} onChange={setRange} /></div>
 
           <div className="kpis">
             {kpis.map(k => (
@@ -108,7 +118,7 @@ export function Overview() {
               {!data.accounts.length && <div className="empty">No accounts yet.</div>}
             </Panel>
 
-            <Panel title="Spending, last 30 days" action={<Link className="link" to="/stats">Statistics</Link>}>
+            <Panel title={`Spending · ${rl}`} action={<Link className="link" to="/stats">Statistics</Link>}>
               <div style={{ padding: '6px 0' }}>
                 {spend.map(x => (
                   <div className="spend-row" key={x.c.id}>
@@ -121,11 +131,11 @@ export function Overview() {
                     <div className="r mono muted" style={{ fontSize: 11.5 }}>{exp ? Math.round((x.val / exp) * 100) : 0}%</div>
                   </div>
                 ))}
-                {!spend.length && <div className="empty">No spending in the last 30 days.</div>}
+                {!spend.length && <div className="empty">No spending in this period.</div>}
               </div>
             </Panel>
 
-            <Panel title="Income and expenses, 6 months" action={
+            <Panel title={`Income and expenses · ${rl}, ${UNIT_NAME[chart.unit]}`} action={
               <div className="legend">
                 <span><Dot color="var(--acc)" />Income</span>
                 <span><Dot color="var(--exp)" />Expenses</span>

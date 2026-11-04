@@ -1,4 +1,5 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { isRange, RANGE_ROWS, rangeDates, rangeLabel, rangeName, type Range } from '../lib/dates';
 import { useLedger } from '../data/context';
 
 export function Seg<K extends string>({ options, value, onChange, className = '' }: {
@@ -111,3 +112,54 @@ export function DisplayCurrency() {
 
 const shortDate = (s: string) =>
   new Date(s + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+
+/** A date range choice remembered per device under `key`. */
+export function useRange(key: string, initial: Range) {
+  const k = `ledger.range.${key}`;
+  const [r, setR] = useState<Range>(() => {
+    try { const v = localStorage.getItem(k); return v && isRange(v) ? v : initial; } catch { return initial; }
+  });
+  const set = (v: Range) => {
+    setR(v);
+    try { localStorage.setItem(k, v); } catch { /* storage unavailable */ }
+  };
+  return [r, set] as const;
+}
+
+/** Button that opens a grid of date ranges, with the chosen range's dates beside it. */
+export function RangePicker({ value, onChange }: { value: Range; onChange: (r: Range) => void }) {
+  const { today } = useLedger();
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const [from, to] = rangeDates(value, today);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => { if (!ref.current?.contains(e.target as Node)) setOpen(false); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey); };
+  }, [open]);
+
+  return (
+    <div className="range" ref={ref}>
+      <button type="button" className="select range-btn" onClick={() => setOpen(o => !o)} aria-expanded={open} aria-haspopup="listbox">
+        {rangeName(value)}
+      </button>
+      <span className="muted small">{rangeLabel(from, to, today)}</span>
+      {open && (
+        <div className="range-pop" role="listbox">
+          {RANGE_ROWS.map((row, i) => row === 'divider'
+            ? <div key={i} className="range-div" />
+            : row.map(([k, label]) => (
+              <button type="button" key={k} role="option" aria-selected={k === value} className={k === value ? 'on' : ''}
+                onClick={() => { onChange(k); setOpen(false); }}>
+                {label}
+              </button>
+            )))}
+        </div>
+      )}
+    </div>
+  );
+}

@@ -43,7 +43,9 @@ export function ChartIE({ months, w, h }: { months: IEMonth[]; w: number; h: num
   const cur = useLedger().idx.disp;
   const iw = w - P.l - P.r, ih = h - P.t - P.b;
   const max = niceMax(Math.max(1, ...months.map(m => Math.max(m.inc, m.exp))));
-  const gw = iw / months.length, bw = Math.min(16, gw * 0.3);
+  const gw = iw / months.length, bw = Math.max(1, Math.min(16, gw * 0.3));
+  // Label every nth bar so labels never overlap.
+  const every = Math.max(1, Math.ceil(46 / gw));
   const els: ReactElement[] = [];
   axis(els, max, w, ih, cur);
   months.forEach((m, i) => {
@@ -51,7 +53,7 @@ export function ChartIE({ months, w, h }: { months: IEMonth[]; w: number; h: num
     const hi = Math.max(0, (m.inc / max) * ih), he = Math.max(0, (m.exp / max) * ih);
     els.push(<rect key={`i${i}`} x={cx - bw - 1} y={P.t + ih - hi} width={bw} height={hi} rx={2} style={{ fill: 'var(--acc)' }}><title>{`${m.full}: income ${fmt(m.inc, cur)}`}</title></rect>);
     els.push(<rect key={`e${i}`} x={cx + 1} y={P.t + ih - he} width={bw} height={he} rx={2} style={{ fill: 'var(--exp)' }}><title>{`${m.full}: expenses ${fmt(m.exp, cur)}`}</title></rect>);
-    els.push(<text key={`l${i}`} x={cx} y={h - 6} textAnchor="middle" style={LBL}>{m.label}</text>);
+    if (i % every === 0) els.push(<text key={`l${i}`} x={cx} y={h - 6} textAnchor="middle" style={LBL}>{m.label}</text>);
   });
   return <svg viewBox={`0 0 ${w} ${h}`} width="100%" style={{ display: 'block' }}>{els}</svg>;
 }

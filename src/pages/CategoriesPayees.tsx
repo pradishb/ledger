@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useLedger } from '../data/context';
 import { api, useLedgerMutation } from '../data/api';
 import { Dot, Header, Seg } from '../components/ui';
-import { periodRange } from '../lib/dates';
+import { rangeDates } from '../lib/dates';
 import { errorMessage, fmt } from '../lib/format';
 import { OTHER, PALETTE, PAYMENTS, type CatType } from '../lib/types';
 
@@ -25,7 +25,7 @@ export function CategoriesPayees() {
     m.mutateAsync(arg).then(() => ok && toast(ok), e => toast(errorMessage(e)));
 
   // Usage counts (all time) and 12-month totals.
-  const [f12, t12] = periodRange('12m', today);
+  const [f12, t12] = rangeDates('l12m', today);
   const cnt = new Map<number, number>(), tot = new Map<number, number>();
   const pcnt = new Map<number, number>(), ptot = new Map<number, number>();
   const inc = (m: Map<number, number>, k: number, v: number) => m.set(k, (m.get(k) ?? 0) + v);

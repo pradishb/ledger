@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { useLedger } from '../data/context';
-import { Bar, Dot, Header, Seg } from '../components/ui';
+import { Bar, Dot, Header, RangePicker, Seg, useRange } from '../components/ui';
 import { Donut, type Seg as DonutSeg } from '../components/Charts';
 import { flows } from '../lib/ledger';
-import { PERIODS, periodRange, rangeLabel, type Period } from '../lib/dates';
+import { rangeDates, rangeName } from '../lib/dates';
 import { fmt } from '../lib/format';
 import { OTHER, PALETTE, type CatType, type Category } from '../lib/types';
 
@@ -15,10 +15,10 @@ export function Stats() {
   const { data, idx, today } = useLedger();
   const [by, setBy] = useState<'cat' | 'payee'>('cat');
   const [type, setType] = useState<CatType>('exp');
-  const [period, setPeriod] = useState<Period>('lm');
+  const [period, setPeriod] = useRange('stats', 'lmonth');
   const [expanded, setExpanded] = useState<Record<number, boolean>>({});
 
-  const [from, to] = periodRange(period, today);
+  const [from, to] = rangeDates(period, today);
   const fl = flows(data.txns, from, to, idx).filter(f => idx.catType(f.cat) === type);
   const sg = type === 'exp' ? -1 : 1;
   const total = fl.reduce((a, f) => a + sg * f.amount, 0);
@@ -69,16 +69,13 @@ export function Stats() {
 
   return (
     <>
-      <Header title="Statistics" subtitle={PERIODS.find(p => p[0] === period)?.[1]} />
+      <Header title="Statistics" subtitle={rangeName(period)} />
       <div className="content">
         <div className="stack">
           <div className="toolbar">
             <Seg value={by} onChange={setBy} options={[['cat', 'By category'], ['payee', 'By payee']] as const} />
             <Seg value={type} onChange={setType} options={[['exp', 'Expenses'], ['inc', 'Income']] as const} />
-            <select className="select" value={period} onChange={e => setPeriod(e.target.value as Period)}>
-              {PERIODS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
-            </select>
-            <span className="muted" style={{ fontSize: 12 }}>{rangeLabel(from, to, today)}</span>
+            <RangePicker value={period} onChange={setPeriod} />
           </div>
 
           <div className="grid2">
