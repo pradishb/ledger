@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useLedger } from '../data/context';
 
 export function Seg<K extends string>({ options, value, onChange, className = '' }: {
@@ -54,4 +54,25 @@ export const Bar = ({ width, color, opacity = 1, height = 8 }: { width: number; 
   <div className="bar" style={{ height }}>
     <div style={{ width: `${Math.max(0, Math.min(100, width)).toFixed(1)}%`, background: color, opacity }} />
   </div>
+);
+
+const OPEN_KEY = 'ledger.openGroups';
+
+/** Which account groups are expanded. Collapsed by default; remembered per device. */
+export function useOpenGroups() {
+  const [open, setOpen] = useState<string[]>(() => {
+    try { return JSON.parse(localStorage.getItem(OPEN_KEY) ?? '[]'); } catch { return []; }
+  });
+  const toggle = (g: string) => setOpen(prev => {
+    const next = prev.includes(g) ? prev.filter(x => x !== g) : [...prev, g];
+    try { localStorage.setItem(OPEN_KEY, JSON.stringify(next)); } catch { /* storage unavailable */ }
+    return next;
+  });
+  return { isOpen: (g: string) => open.includes(g), toggle };
+}
+
+export const Chevron = ({ open }: { open: boolean }) => (
+  <svg className={`chev${open ? ' open' : ''}`} width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
+    <path d="M3 1.5 6.5 5 3 8.5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
 );

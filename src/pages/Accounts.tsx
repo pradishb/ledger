@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router';
 import { useLedger } from '../data/context';
 import { api, useLedgerMutation } from '../data/api';
-import { Header } from '../components/ui';
+import { Chevron, Header, useOpenGroups } from '../components/ui';
 import { accountGroups, balColor, sumBy } from '../lib/ledger';
 import { errorMessage, fmt, parseMoney } from '../lib/format';
 import { ACCOUNT_TYPES, type AccountType } from '../lib/types';
@@ -17,6 +17,7 @@ export function Accounts() {
   const [opening, setOpening] = useState('');
 
   const groups = accountGroups(data.accounts, bal);
+  const { isOpen, toggle } = useOpenGroups();
   const total = sumBy(data.accounts, a => bal.get(a.id) ?? 0);
 
   async function submit(e: FormEvent) {
@@ -58,12 +59,14 @@ export function Accounts() {
             </thead>
             <tbody>
               {groups.map(g => [
-                <tr className="group" key={g.label}>
-                  <td style={{ fontWeight: 600, color: 'var(--ink2)', fontSize: 11.5, paddingTop: 6, paddingBottom: 6 }}>{g.label}</td>
+                <tr className="group toggle" key={g.label} onClick={() => toggle(g.label)} aria-expanded={isOpen(g.label)}>
+                  <td style={{ fontWeight: 600, color: 'var(--ink2)', fontSize: 11.5, paddingTop: 6, paddingBottom: 6 }}>
+                    <Chevron open={isOpen(g.label)} />{g.label} <span className="muted" style={{ fontWeight: 400 }}>· {g.accounts.length}</span>
+                  </td>
                   <td className="hide-m" />
                   <td className="num" style={{ fontWeight: 600, color: balColor(g.balance) }}>{fmt(g.balance)}</td>
                 </tr>,
-                ...g.accounts.map(a => {
+                ...(isOpen(g.label) ? g.accounts : []).map(a => {
                   const b = bal.get(a.id) ?? 0;
                   return (
                     <tr className="clickable" key={a.id} onClick={() => navigate(`/accounts/${a.id}`)}>

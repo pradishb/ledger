@@ -102,6 +102,10 @@ a { color: var(--acc); }
 .tbl tbody tr:hover { background: var(--hover); }
 .tbl tr.group { background: var(--sunk); }
 .tbl tr.clickable { cursor: pointer; }
+.tbl tr.group.toggle { cursor: pointer; user-select: none; }
+.tbl tr.group.toggle:hover { filter: brightness(0.97); }
+.chev { display: inline-block; margin-right: 8px; vertical-align: -1px; transition: transform .15s; }
+.chev.open { transform: rotate(90deg); }
 .tbl tr.sel { background: var(--sel); }
 .reg-row { user-select: none; cursor: default; }
 .empty { padding: 28px; text-align: center; color: var(--ink3); }

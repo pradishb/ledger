@@ -1,7 +1,7 @@
 import { Link, useNavigate } from 'react-router';
 import { useLedger } from '../data/context';
 import { api, useLedgerMutation } from '../data/api';
-import { Bar, Dot, Header, Panel } from '../components/ui';
+import { Bar, Chevron, Dot, Header, Panel, useOpenGroups } from '../components/ui';
 import { ChartIE, Sized } from '../components/Charts';
 import { accountGroups, balColor, describeTxn, flows, sumType } from '../lib/ledger';
 import { addDays, fdate, longDate, monthsBack } from '../lib/dates';
@@ -10,6 +10,7 @@ import { errorMessage, fmt, fmt0 } from '../lib/format';
 export function Overview() {
   const { data, idx, bal, today, netWorth, openEdit, isMobile, online, toast } = useLedger();
   const navigate = useNavigate();
+  const { isOpen, toggle } = useOpenGroups();
   const seed = useLedgerMutation(api.seedCategories);
 
   const fl30 = flows(data.txns, addDays(today, -30), today);
@@ -84,11 +85,13 @@ export function Overview() {
               <table className="tbl">
                 <tbody>
                   {accountGroups(data.accounts, bal).map(g => [
-                    <tr className="group" key={g.label}>
-                      <td style={{ fontWeight: 600, color: 'var(--ink2)', fontSize: 11.5 }}>{g.label}</td>
+                    <tr className="group toggle" key={g.label} onClick={() => toggle(g.label)} aria-expanded={isOpen(g.label)}>
+                      <td style={{ fontWeight: 600, color: 'var(--ink2)', fontSize: 11.5 }}>
+                        <Chevron open={isOpen(g.label)} />{g.label} <span className="muted" style={{ fontWeight: 400 }}>· {g.accounts.length}</span>
+                      </td>
                       <td className="num" style={{ fontWeight: 600, color: balColor(g.balance) }}>{fmt(g.balance)}</td>
                     </tr>,
-                    ...g.accounts.map(a => {
+                    ...(isOpen(g.label) ? g.accounts : []).map(a => {
                       const b = bal.get(a.id) ?? 0;
                       return (
                         <tr className="clickable" key={a.id} onClick={() => navigate(`/accounts/${a.id}`)}>
