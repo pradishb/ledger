@@ -58,6 +58,8 @@ export function balances(d: LedgerData, today: string) {
 }
 
 export interface Flow {
+  /** The transaction it comes from (a split transaction gives several flows with the same id). */
+  id: number;
   cat: number;
   amount: number;
   payee: number;
@@ -69,8 +71,8 @@ export function flows(txns: Txn[], from: string, to: string, idx: Index): Flow[]
   const out: Flow[] = [];
   for (const t of txns) {
     if (t.xfer || t.date < from || t.date > to) continue;
-    if (t.splits) for (const s of t.splits) out.push({ cat: s.cat, amount: idx.toDisp(t.acc, s.amount), payee: t.payee, date: t.date });
-    else out.push({ cat: t.cat, amount: idx.toDisp(t.acc, t.amount), payee: t.payee, date: t.date });
+    if (t.splits) for (const s of t.splits) out.push({ id: t.id, cat: s.cat, amount: idx.toDisp(t.acc, s.amount), payee: t.payee, date: t.date });
+    else out.push({ id: t.id, cat: t.cat, amount: idx.toDisp(t.acc, t.amount), payee: t.payee, date: t.date });
   }
   return out;
 }

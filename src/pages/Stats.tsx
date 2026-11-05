@@ -6,10 +6,12 @@ import { txnsLink } from '../lib/links';
 import { flows } from '../lib/ledger';
 import { rangeDates, rangeName } from '../lib/dates';
 import { fmt } from '../lib/format';
-import { OTHER, rankColor, type CatType, type Category } from '../lib/types';
+import { OTHER, rankColor, type CatType } from '../lib/types';
 
 interface Row {
   key: string; name: string; color: string; amount: number; sub: boolean;
+  /** How many transactions it's made of. */
+  count: number;
   /** Where clicking the row goes: its transactions for this period (none for "(no category)", which Transactions can't filter by). */
   href?: string;
   /** For a category with subcategories: whether they're shown, and how to toggle that. */
@@ -43,45 +45,60 @@ export function Stats() {
   const rows: Row[] = [];
   const link = (f: { category?: number; payee?: number; kind?: CatType }) => txnsLink({ ...f, from, to });
 
+  // An amount and the transactions it came from (a split counts once per row it adds to).
+  type Sum = { amount: number; ids: Set<number> };
+  const sum = (): Sum => ({ amount: 0, ids: new Set() });
+  const add = (m: Map<number, Sum>, k: number, f: { id: number; amount: number }) => {
+    const s = m.get(k) ?? sum();
+    m.set(k, s);
+    s.amount += sg * f.amount;
+    s.ids.add(f.id);
+  };
+
   if (by === 'cat') {
-    const agg = new Map<number, { c: Category; total: number; subs: Map<number, number> }>();
-    let none = 0;
+    const agg = new Map<number, Sum>();
+    const subs = new Map<number, Map<number, Sum>>();
+    const none = sum();
     for (const f of fl) {
       const tp = idx.topOf(f.cat);
-      if (!tp) { none += sg * f.amount; continue; }
-      const g = agg.get(tp.id) ?? { c: tp, total: 0, subs: new Map<number, number>() };
-      agg.set(tp.id, g);
-      g.total += sg * f.amount;
-      g.subs.set(f.cat, (g.subs.get(f.cat) ?? 0) + sg * f.amount);
+      if (!tp) { none.amount += sg * f.amount; none.ids.add(f.id); continue; }
+      add(agg, tp.id, f);
+      if (!subs.has(tp.id)) subs.set(tp.id, new Map());
+      add(subs.get(tp.id)!, f.cat, f);
     }
-    const list = [...agg.values()].filter(g => g.total !== 0).sort((a, b) => b.total - a.total);
-    list.forEach((g, i) => {
+    const list = [...agg].filter(([, g]) => g.amount !== 0).sort((a, b) => b[1].amount - a[1].amount);
+    list.forEach(([cid, g], i) => {
       const color = rankColor(i);
-      const hasSubs = [...g.subs.keys()].some(k => k !== g.c.id);
-      const open = !!expanded[g.c.id];
+      const gs = subs.get(cid)!;
+      const hasSubs = [...gs.keys()].some(k => k !== cid);
+      const open = !!expanded[cid];
       rows.push({
-        key: `c${g.c.id}`, name: g.c.name, color, amount: g.total, sub: false, href: link({ category: g.c.id }),
-        open, toggle: hasSubs ? () => setExpanded(p => ({ ...p, [g.c.id]: !p[g.c.id] })) : undefined,
+        key: `c${cid}`, name: idx.catMap.get(cid)?.name ?? '?', color, amount: g.amount, count: g.ids.size, sub: false, href: link({ category: cid }),
+        open, toggle: hasSubs ? () => setExpanded(p => ({ ...p, [cid]: !p[cid] })) : undefined,
       });
       if (open) {
-        [...g.subs].sort((a, b) => b[1] - a[1]).forEach(([id, val]) => rows.push({
-          key: `s${id}`, name: id === g.c.id ? '(no subcategory)' : idx.catMap.get(id)?.name ?? '?',
+        [...gs].sort((a, b) => b[1].amount - a[1].amount).forEach(([id, v]) => rows.push({
+          key: `s${id}`, name: id === cid ? '(no subcategory)' : idx.catMap.get(id)?.name ?? '?',
           // "(no subcategory)" can only link to the parent, which includes its subcategories too.
-          color, amount: val, sub: true, href: link({ category: id }),
+          color, amount: v.amount, count: v.ids.size, sub: true, href: link({ category: id }),
         }));
       }
     });
-    if (none !== 0) rows.push({ key: 'c0', name: '(no category)', color: OTHER, amount: none, sub: false });
+    if (none.amount !== 0) rows.push({ key: 'c0', name: '(no category)', color: OTHER, amount: none.amount, count: none.ids.size, sub: false });
   } else {
-    const agg = new Map<number, number>();
-    for (const f of fl) agg.set(f.payee, (agg.get(f.payee) ?? 0) + sg * f.amount);
-    const list = [...agg].map(([id, val]) => ({ id, name: idx.payMap.get(id)?.name || '(no payee)', val }))
-      .filter(x => x.val !== 0).sort((a, b) => b.val - a.val);
-    list.forEach((x, i) => rows.push({ key: `p${x.id}`, name: x.name, color: rankColor(i), amount: x.val, sub: false, href: link({ payee: x.id, kind: type }) }));
+    const agg = new Map<number, Sum>();
+    for (const f of fl) add(agg, f.payee, f);
+    const list = [...agg].map(([id, v]) => ({ id, name: idx.payMap.get(id)?.name || '(no payee)', v }))
+      .filter(x => x.v.amount !== 0).sort((a, b) => b.v.amount - a.v.amount);
+    list.forEach((x, i) => rows.push({
+      key: `p${x.id}`, name: x.name, color: rankColor(i), amount: x.v.amount, count: x.v.ids.size, sub: false, href: link({ payee: x.id, kind: type }),
+    }));
   }
   const mx = Math.max(1, ...rows.filter(r => !r.sub).map(r => r.amount));
   // Size the amount column to the longest amount, so millions never run into the share.
   const amtW = Math.max(0, ...rows.map(r => fmt(r.amount, idx.disp).length));
+  const cntW = Math.max(1, ...rows.map(r => String(r.count).length));
+  const txnCount = new Set(fl.map(f => f.id)).size;
 
   return (
     <>
@@ -102,10 +119,10 @@ export function Stats() {
           <div style={{ maxWidth: 920 }}>
             <Panel title={`${type === 'exp' ? 'Where your money goes' : 'Where your money comes from'} · ${by === 'cat' ? 'by category' : 'by payee'}`}
               action={<span className="flex items-baseline gap-2 text-xs text-muted-foreground">
-                {fl.length} entries
+                {txnCount} transaction{txnCount === 1 ? '' : 's'}
                 <span className="font-mono text-[13px] font-medium" style={{ color: type === 'exp' ? 'var(--out)' : 'var(--inc)' }}>{fmt(total, idx.disp)}</span>
               </span>}>
-              <div className="panel-body stats-list" style={{ '--amt-w': `${amtW + 1}ch` } as CSSProperties}>
+              <div className="panel-body stats-list" style={{ '--amt-w': `${amtW + 1}ch`, '--cnt-w': `${cntW + 1}ch` } as CSSProperties}>
                 {rows.map(r => (
                   <div key={r.key} className={`spend-row${r.href ? ' clickable' : ''}${r.sub ? ' sub' : ''}`}
                     onClick={r.href ? () => navigate(r.href!) : undefined} title={r.href ? `Show ${r.name} transactions` : undefined}>
@@ -120,6 +137,7 @@ export function Stats() {
                       <span className="ell" style={{ fontWeight: r.sub ? 400 : 500, color: r.sub ? 'var(--ink2)' : 'var(--ink)' }}>{r.name}</span>
                     </div>
                     <Bar width={(Math.max(0, r.amount) / mx) * 100} color={r.color} opacity={r.sub ? 0.55 : 1} />
+                    <div className="r mono muted" style={{ fontSize: 11.5, opacity: r.sub ? 0.75 : 1 }} title={`${r.count} transaction${r.count === 1 ? '' : 's'}`}>{r.count}</div>
                     <div className="r mono" style={{ fontSize: 12, color: type === 'exp' ? 'var(--out)' : 'var(--inc)', opacity: r.sub ? 0.75 : 1 }}>{fmt(r.amount, idx.disp)}</div>
                     <div className="r mono muted" style={{ fontSize: 11.5 }}>{pct(r.amount)}</div>
                   </div>

@@ -126,7 +126,7 @@ input.input[type='date']::-webkit-date-and-time-value { text-align: left; margin
 .dash3 .panel { display: flex; flex-direction: column; min-height: 0; }
 .panel-body { flex: 1; min-height: 0; overflow: auto; padding: 2px 0 6px; }
 .dash3 .spend-row { grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) var(--amt-w, 92px) 36px; gap: 10px; }
-.stats-list .spend-row { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.4fr) var(--amt-w, 92px) 48px; gap: 12px; padding: 6px 14px; }
+.stats-list .spend-row { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.4fr) var(--cnt-w, 4ch) var(--amt-w, 92px) 48px; gap: 12px; padding: 6px 14px; }
 .stats-list .spend-row.sub { padding-top: 3px; padding-bottom: 3px; background: var(--sunk); }
 .stats-list .spend-row.clickable { cursor: pointer; }
 .spend-row.clickable { cursor: pointer; border-radius: 0; }
