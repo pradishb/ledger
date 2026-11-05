@@ -1,5 +1,5 @@
 import { Link } from 'react-router';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { useLedger } from '../data/context';
 import { api, useLedgerMutation } from '../data/api';
 import { Dot, Header, Seg, useUrlChoice, useUrlText } from '../components/common';
@@ -8,6 +8,8 @@ import { errorMessage } from '../lib/format';
 import { OTHER, type CatType, type Category, type Payee } from '../lib/types';
 import { CategoryModal, PayeeModal } from '../components/CatPayeeModals';
 import { Button } from '@/components/ui/button';
+import { ArrowDown, ArrowUp } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 export function CategoriesPayees() {
   const { data, idx, online, toast, setNewShortcut } = useLedger();
@@ -17,6 +19,8 @@ export function CategoriesPayees() {
   const [dialog, setDialog] = useState<{ kind: 'cat'; category?: Category } | { kind: 'payee'; payee?: Payee } | null>(null);
   const [payeeQ, setPayeeQ] = useUrlText('q');
   const [catQ, setCatQ] = useUrlText('cq');
+  const [catSort, setCatSort] = useUrlChoice('csort', SORTS, 'name');
+  const [payeeSort, setPayeeSort] = useUrlChoice('sort', SORTS, 'name');
 
   const delCat = useLedgerMutation(api.deleteCategory);
   const delPayee = useLedgerMutation(api.deletePayee);
@@ -44,8 +48,10 @@ export function CategoriesPayees() {
   // A search keeps a category whose name matches, with all its subcategories, or the subcategories that match.
   const cq = catQ.trim().toLowerCase();
   const hit = (c: Category) => c.name.toLowerCase().includes(cq);
-  const tops = idx.tops.filter(c => c.type === catType)
-    .map(c => ({ c, subs: !cq || hit(c) ? idx.subsOf(c.id) : idx.subsOf(c.id).filter(hit) }))
+  // Subcategories sort within their category, which sorts by its own name or by its total count.
+  const subCount = (id: number) => idx.subsOf(id).reduce((a, x) => a + (cnt.get(x.id) ?? 0), 0);
+  const tops = sortBy(idx.tops.filter(c => c.type === catType), catSort, c => (cnt.get(c.id) ?? 0) + subCount(c.id))
+    .map(c => ({ c, subs: sortBy(!cq || hit(c) ? idx.subsOf(c.id) : idx.subsOf(c.id).filter(hit), catSort, x => cnt.get(x.id) ?? 0) }))
     .filter(x => !cq || hit(x.c) || x.subs.length);
 
   function assignExisting() {
@@ -55,7 +61,7 @@ export function CategoriesPayees() {
       e => toast(errorMessage(e)));
   }
   const pq = payeeQ.trim().toLowerCase();
-  const payees = [...data.payees].sort((a, b) => a.name.localeCompare(b.name)).filter(p => !pq || p.name.toLowerCase().includes(pq));
+  const payees = sortBy(data.payees.filter(p => !pq || p.name.toLowerCase().includes(pq)), payeeSort, p => pcnt.get(p.id) ?? 0);
 
   return (
     <>
@@ -76,8 +82,8 @@ export function CategoriesPayees() {
               <table className="tbl">
                 <thead>
                   <tr>
-                    <th>Category</th>
-                    <th className="r" style={{ width: 110 }}>Transactions</th>
+                    <SortTh col="name" sort={catSort} onSort={setCatSort}>Category</SortTh>
+                    <SortTh col="count" right sort={catSort} onSort={setCatSort} style={{ width: 110 }}>Transactions</SortTh>
                     <th style={{ width: 110 }} />
                   </tr>
                 </thead>
@@ -128,9 +134,9 @@ export function CategoriesPayees() {
                 <table className="tbl tbl-fixed" style={{ minWidth: 520 }}>
                   <thead>
                     <tr>
-                      <th>Payee</th>
+                      <SortTh col="name" sort={payeeSort} onSort={setPayeeSort}>Payee</SortTh>
                       <th style={{ width: 320 }}>Matches memo</th>
-                      <th className="r" style={{ width: 100 }}>Transactions</th>
+                      <SortTh col="count" right sort={payeeSort} onSort={setPayeeSort} style={{ width: 110 }}>Transactions</SortTh>
                       <th style={{ width: 110 }} />
                     </tr>
                   </thead>
@@ -163,3 +169,32 @@ export function CategoriesPayees() {
   );
 }
 
+/** Column and direction, as one URL value: "-" in front means descending. */
+const SORTS = ['name', '-name', 'count', '-count'] as const;
+type Sort = (typeof SORTS)[number];
+
+/** A copy of `list` sorted by name or by `count`, names breaking ties. */
+function sortBy<T extends { name: string }>(list: T[], sort: Sort, count: (x: T) => number) {
+  const dir = sort.startsWith('-') ? -1 : 1;
+  const byName = (a: T, b: T) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true });
+  return [...list].sort((a, b) => sort.endsWith('count') ? dir * (count(a) - count(b)) || byName(a, b) : dir * byName(a, b));
+}
+
+/** A header that sorts by its column: names start A to Z, counts start with the most used. Same look as the data table's headers. */
+function SortTh({ col, sort, onSort, right, style, children }: {
+  col: 'name' | 'count'; sort: Sort; onSort: (s: Sort) => void; right?: boolean; style?: CSSProperties; children: ReactNode;
+}) {
+  const on = sort.endsWith(col);
+  const desc = sort.startsWith('-');
+  const first: Sort = col === 'name' ? 'name' : '-count';
+  const next: Sort = !on ? first : desc ? (col === 'name' ? 'name' : 'count') : (col === 'name' ? '-name' : '-count');
+  return (
+    <th className={right ? 'r' : undefined} style={style} aria-sort={on ? (desc ? 'descending' : 'ascending') : undefined}>
+      <button type="button" onClick={() => onSort(next)}
+        className={cn('inline-flex max-w-full items-center gap-1 hover:text-foreground', right && 'flex-row-reverse', on && 'font-semibold text-foreground')}>
+        <span className="truncate">{children}</span>
+        {on && (desc ? <ArrowDown className="size-3 shrink-0" /> : <ArrowUp className="size-3 shrink-0" />)}
+      </button>
+    </th>
+  );
+}
