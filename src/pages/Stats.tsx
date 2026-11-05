@@ -6,12 +6,12 @@ import { txnsLink } from '../lib/links';
 import { flows } from '../lib/ledger';
 import { rangeDates, rangeName } from '../lib/dates';
 import { fmt } from '../lib/format';
-import { rankColor, type CatType, type Category } from '../lib/types';
+import { OTHER, rankColor, type CatType, type Category } from '../lib/types';
 
 interface Row {
   key: string; name: string; color: string; amount: number; sub: boolean;
-  /** Where clicking the row goes: its transactions for this period. */
-  href: string;
+  /** Where clicking the row goes: its transactions for this period (none for "(no category)", which Transactions can't filter by). */
+  href?: string;
   /** For a category with subcategories: whether they're shown, and how to toggle that. */
   open?: boolean; toggle?: () => void;
 }
@@ -23,9 +23,19 @@ export function Stats() {
   const [type, setType] = useState<CatType>('exp');
   const [period, setPeriod] = useRange('stats', 'lmonth');
   const [expanded, setExpanded] = useState<Record<number, boolean>>({});
+  // Leave out entries without a category (By category) or payee (By payee), remembered per device.
+  const [hideNone, setHideNone] = useState<Record<'cat' | 'payee', boolean>>(() => {
+    try { return { cat: false, payee: false, ...JSON.parse(localStorage.getItem('ledger.stats.hideNone') ?? '{}') }; } catch { return { cat: false, payee: false }; }
+  });
+  const toggleHideNone = (v: boolean) => {
+    const next = { ...hideNone, [by]: v };
+    setHideNone(next);
+    try { localStorage.setItem('ledger.stats.hideNone', JSON.stringify(next)); } catch { /* storage unavailable */ }
+  };
 
   const [from, to] = rangeDates(period, today);
-  const fl = flows(data.txns, from, to, idx).filter(f => idx.catType(f.cat) === type);
+  const fl = flows(data.txns, from, to, idx).filter(f => idx.catType(f.cat) === type)
+    .filter(f => !hideNone[by] || (by === 'cat' ? !!idx.topOf(f.cat) : !!idx.payMap.get(f.payee)));
   const sg = type === 'exp' ? -1 : 1;
   const total = fl.reduce((a, f) => a + sg * f.amount, 0);
   const pct = (x: number) => (total > 0 ? ((x / total) * 100).toFixed(1) + '%' : '—');
@@ -35,9 +45,10 @@ export function Stats() {
 
   if (by === 'cat') {
     const agg = new Map<number, { c: Category; total: number; subs: Map<number, number> }>();
+    let none = 0;
     for (const f of fl) {
       const tp = idx.topOf(f.cat);
-      if (!tp) continue;
+      if (!tp) { none += sg * f.amount; continue; }
       const g = agg.get(tp.id) ?? { c: tp, total: 0, subs: new Map<number, number>() };
       agg.set(tp.id, g);
       g.total += sg * f.amount;
@@ -60,6 +71,7 @@ export function Stats() {
         }));
       }
     });
+    if (none !== 0) rows.push({ key: 'c0', name: '(no category)', color: OTHER, amount: none, sub: false });
   } else {
     const agg = new Map<number, number>();
     for (const f of fl) agg.set(f.payee, (agg.get(f.payee) ?? 0) + sg * f.amount);
@@ -80,6 +92,10 @@ export function Stats() {
             <Seg value={by} onChange={setBy} options={[['cat', 'By category'], ['payee', 'By payee']] as const} />
             <Seg value={type} onChange={setType} options={[['exp', 'Expenses'], ['inc', 'Income']] as const} />
             <RangePicker value={period} onChange={setPeriod} />
+            <label className="check-field" style={{ display: 'flex' }}>
+              <input type="checkbox" checked={hideNone[by]} onChange={e => toggleHideNone(e.target.checked)} />
+              Hide {by === 'cat' ? '(no category)' : '(no payee)'}
+            </label>
           </div>
 
           {/* One list, like the Overview's "Where your money goes": name, bar, amount, share. */}
@@ -91,7 +107,8 @@ export function Stats() {
               </span>}>
               <div className="panel-body stats-list" style={{ '--amt-w': `${amtW + 1}ch` } as CSSProperties}>
                 {rows.map(r => (
-                  <div key={r.key} className={`spend-row clickable${r.sub ? ' sub' : ''}`} onClick={() => navigate(r.href)} title={`Show ${r.name} transactions`}>
+                  <div key={r.key} className={`spend-row${r.href ? ' clickable' : ''}${r.sub ? ' sub' : ''}`}
+                    onClick={r.href ? () => navigate(r.href!) : undefined} title={r.href ? `Show ${r.name} transactions` : undefined}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, paddingLeft: r.sub ? 26 : 0 }}>
                       {r.toggle ? (
                         <button type="button" className="expand" aria-expanded={r.open} aria-label={r.open ? 'Hide subcategories' : 'Show subcategories'}
