@@ -270,12 +270,13 @@ export function Register() {
                   const v = describeTxn(t, amt, A, idx);
                   return (
                     <div className="mrow" key={t.id} onClick={() => openEdit(t)} style={{ opacity: t.date > today ? 0.55 : 1 }}>
-                      <div className="p">{v.payee}</div>
+                      {/* The memo leads on phones; the payee (or transfer) moves to the line below, or leads when there's no memo. */}
+                      <div className="p">{t.memo || v.payee}</div>
                       <div className="a" style={{ color: v.amtColor }}>{fmt(amt, rowCur(t))}</div>
                       <div className="m">
                         {fdate(t.date, today)} · <span style={{ color: v.catColor }}>{v.category}</span>
+                        {t.memo && v.payee !== '—' && ` · ${v.payee}`}
                         {!A && ` · ${idx.accMap.get(t.acc)?.name ?? ''}`}
-                        {t.memo && ` · ${t.memo}`}
                       </div>
                       <div className="b" style={{ color: A ? balColor(run) : 'var(--ink3)' }}>{A ? fmt(run, acur) : tagText(t)}</div>
                     </div>
