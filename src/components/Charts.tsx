@@ -131,3 +131,35 @@ export function ChartStack({ months, series, w, h }: { months: Month[]; series: 
   return <svg viewBox={`0 0 ${w} ${h}`} width="100%" style={{ display: 'block' }}>{els}</svg>;
 }
 
+
+/** One value per period as a line with dots (net worth), with a zero line when it goes negative. */
+export function ChartLine({ months, values, w, h, color = 'var(--acc)', name }: {
+  months: Month[]; values: number[]; w: number; h: number; color?: string; name: string;
+}) {
+  const cur = useLedger().idx.disp;
+  const iw = w - P.l - P.r, ih = h - P.t - P.b;
+  const hi = niceMax(Math.max(0, ...values)), lo = -niceMax(Math.max(0, ...values.map(v => -v)));
+  const top = Math.max(...values) > 0 ? hi : 0, bot = Math.min(...values) < 0 ? lo : 0;
+  const span = top - bot || 1;
+  const gw = iw / Math.max(1, months.length);
+  const x = (i: number) => P.l + i * gw + gw / 2;
+  const y = (v: number) => P.t + ih - ((v - bot) / span) * ih;
+  const every = Math.max(1, Math.ceil(46 / gw));
+  const els: ReactElement[] = [];
+  for (let i = 0; i <= 4; i++) {
+    const v = bot + (span * i) / 4, gy = y(v);
+    els.push(<line key={`g${i}`} x1={P.l} x2={w - P.r} y1={gy} y2={gy} style={{ stroke: 'var(--line)' }} />);
+    els.push(<text key={`t${i}`} x={P.l - 8} y={gy + 3.5} textAnchor="end" style={TXT}>{fmtK(v, cur)}</text>);
+  }
+  if (bot < 0) els.push(<line key="zero" x1={P.l} x2={w - P.r} y1={y(0)} y2={y(0)} style={{ stroke: 'var(--ink3)' }} />);
+  if (values.length) {
+    const pts = values.map((v, i) => `${x(i)},${y(v)}`).join(' ');
+    els.push(<polygon key="area" points={`${x(0)},${y(0)} ${pts} ${x(values.length - 1)},${y(0)}`} style={{ fill: color, opacity: 0.12 }} />);
+    els.push(<polyline key="line" points={pts} style={{ fill: 'none', stroke: color, strokeWidth: 2, strokeLinejoin: 'round' }} />);
+  }
+  months.forEach((m, i) => {
+    els.push(<circle key={`p${i}`} cx={x(i)} cy={y(values[i])} r={gw < 12 ? 1.5 : 3} style={{ fill: color }}><title>{`${m.full} · ${name}: ${fmt(values[i], cur)}`}</title></circle>);
+    if ((months.length - 1 - i) % every === 0) els.push(<text key={`l${i}`} x={x(i)} y={h - 6} textAnchor="middle" style={LBL}>{m.label}</text>);
+  });
+  return <svg viewBox={`0 0 ${w} ${h}`} width="100%" style={{ display: 'block' }}>{els}</svg>;
+}

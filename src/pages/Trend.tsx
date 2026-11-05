@@ -1,9 +1,9 @@
 import { useState, type MouseEvent, type ReactNode } from 'react';
 import { useLedger } from '../data/context';
-import { Dot, Header, RangePicker, Seg, useRange, useUrlChoice, useUrlIds } from '../components/common';
-import { ChartIE, ChartStack, Sized, type Series } from '../components/Charts';
+import { Dot, Header, Panel, RangePicker, Seg, useRange, useUrlChoice, useUrlIds } from '../components/common';
+import { ChartIE, ChartLine, ChartStack, Sized, SizedBox, type Series } from '../components/Charts';
 import { balColor, flows, sumType } from '../lib/ledger';
-import { buckets, rangeDates, rangeLabel, unitFits, UNIT_NAME, type Unit } from '../lib/dates';
+import { addDays, buckets, rangeDates, rangeLabel, unitFits, UNIT_NAME, type Unit } from '../lib/dates';
 import { fmt0 } from '../lib/format';
 import { OTHER } from '../lib/types';
 
@@ -12,7 +12,7 @@ interface Row { name: string; color: string; cells: Cell[]; total: string; avg: 
 
 export function Trend() {
   const { data, idx, today } = useLedger();
-  const [mode, setMode] = useUrlChoice('mode', ['ie', 'cat'] as const, 'ie');
+  const [mode, setMode] = useUrlChoice('mode', ['ie', 'cat', 'nw'] as const, 'ie');
   const [range, setRange] = useRange('trend', 'l12m');
   const [unit, setUnit] = useTrendUnit();
   const [hidden, setHidden] = useUrlIds('hide');
@@ -37,6 +37,7 @@ export function Trend() {
   let rows: Row[];
   let legend: { key: string; name: string; color: string; op: number; onClick?: (e: MouseEvent) => void }[];
   let chart: (w: number) => ReactNode;
+  let nwView: ReactNode = null;
 
   if (mode === 'ie') {
     const inc = mfl.map(f => sumType(f, 'inc', idx)), exp = mfl.map(f => sumType(f, 'exp', idx));
@@ -53,6 +54,78 @@ export function Trend() {
         total: T(inc) ? Math.round((T(net) / T(inc)) * 100) + '%' : '–', avg: '', totColor: 'var(--ink2)', weight: 400, op: 1,
       },
     ];
+  } else if (mode === 'nw') {
+    // Balances at the end of each period (today at the latest, like the Overview), from the opening
+    // balances and every transaction up to then, converted at today's rates. Hidden accounts count.
+    const txns = [...data.txns].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+    const accBal = new Map(data.accounts.map(a => [a.id, a.opening]));
+    const apply = (id: number, amt: number) => { if (accBal.has(id)) accBal.set(id, accBal.get(id)! + amt); };
+    let k = 0;
+    const at = (date: string) => {
+      for (; k < txns.length && txns[k].date <= date; k++) {
+        const t = txns[k];
+        apply(t.acc, t.amount);
+        if (t.xfer) apply(t.xfer, t.xamt ?? -t.amount);
+      }
+      let assets = 0, owed = 0;
+      for (const a of data.accounts) {
+        const v = idx.toDisp(a.id, accBal.get(a.id) ?? 0);
+        if (v >= 0) assets += v; else owed -= v;
+      }
+      return { assets, owed, net: assets - owed };
+    };
+    const start = at(addDays(months[0].from, -1));
+    const ends = months.map(m => at(m.to < today ? m.to : today));
+    const assets = ends.map(e => e.assets), owed = ends.map(e => e.owed), net = ends.map(e => e.net);
+    const change = net.map((x, i) => x - (i ? net[i - 1] : start.net));
+    const total = net[N - 1] - start.net;
+    const money = (x: number, color: string, weight = 400) => (
+      <td className="num" style={{ fontSize: 12, color, fontWeight: weight }}>{fmt0(x, idx.disp)}</td>
+    );
+    chart = () => null; legend = []; rows = [];
+    // Chart on the left at full height; the periods, newest first, on the right.
+    nwView = (
+      <div className="nw-split">
+        <Panel title="Net worth" action={<span className="font-mono text-[13px] font-medium" style={{ color: balColor(net[N - 1]) }}>{fmt0(net[N - 1], idx.disp)}</span>}>
+          <SizedBox style={{ minHeight: 260, padding: '8px 12px 8px' }}>
+            {(w, h) => <ChartLine months={months} values={net} name="Net worth" w={w} h={h} />}
+          </SizedBox>
+        </Panel>
+        <div className="panel nw-table">
+          <table className="tbl">
+            <thead>
+              <tr>
+                <th>{per[0].toUpperCase() + per.slice(1)}</th>
+                <th className="r">Assets</th>
+                <th className="r">Owed</th>
+                <th className="r">Net worth</th>
+                <th className="r" title={`Change from the ${per} before`}>Change</th>
+              </tr>
+            </thead>
+            <tbody>
+              {months.map((m, i) => ({ m, i })).reverse().map(({ m, i }) => (
+                <tr key={m.key}>
+                  <td style={{ whiteSpace: 'nowrap' }}>{m.full}</td>
+                  {money(assets[i], 'var(--inc)')}
+                  {money(owed[i], 'var(--out)')}
+                  {money(net[i], balColor(net[i]), 600)}
+                  {money(change[i], balColor(change[i]))}
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr>
+                <td style={{ fontWeight: 600 }}>Over the range</td>
+                {money(assets[N - 1] - start.assets, 'var(--ink2)')}
+                {money(owed[N - 1] - start.owed, 'var(--ink2)')}
+                {money(total, balColor(total), 600)}
+                <td className="num muted" style={{ fontSize: 11.5 }} title={`Average change per ${per}`}>{fmt0(total / N, idx.disp)}/{per}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </div>
+    );
   } else {
     const series: Series[] = idx.tops.filter(c => c.type === 'exp').map(c => ({
       id: c.id, name: c.name, color: c.color ?? OTHER,
@@ -81,11 +154,11 @@ export function Trend() {
 
   return (
     <>
-      <Header title="Trend over time" subtitle={`${UNIT_NAME[shownUnit]}, transfers excluded`} />
+      <Header title="Trend over time" subtitle={mode === 'nw' ? `${UNIT_NAME[shownUnit]}, balance at each period's end` : `${UNIT_NAME[shownUnit]}, transfers excluded`} />
       <div className="content">
-        <div className="stack">
+        <div className={`stack${mode === 'nw' ? ' dash' : ''}`}>
           <div className="toolbar">
-            <Seg value={mode} onChange={setMode} options={[['ie', 'Income vs expenses'], ['cat', 'Spending by category']] as const} />
+            <Seg value={mode} onChange={setMode} options={[['ie', 'Income vs expenses'], ['cat', 'Spending by category'], ['nw', 'Net worth']] as const} />
             <RangePicker value={range} onChange={setRange} />
             <select className="select" value={shownUnit} onChange={e => setUnit(e.target.value as Unit)} aria-label="One column per">
               {PERIODS.map(u => <option key={u} value={u} disabled={!fits(u)}>{UNIT_NAME[u]}</option>)}
@@ -93,6 +166,7 @@ export function Trend() {
             {(cFrom !== rFrom || cTo !== rTo) && <span className="muted" style={{ fontSize: 12 }}>Data: {rangeLabel(cFrom, cTo, today)}</span>}
           </div>
 
+          {nwView ?? <>
           <div className="panel">
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '10px 14px', borderBottom: '1px solid var(--line)' }}>
               {legend.map(l => (
@@ -134,6 +208,7 @@ export function Trend() {
               </tbody>
             </table>
           </div>
+          </>}
         </div>
       </div>
     </>
