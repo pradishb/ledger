@@ -4,7 +4,7 @@ import type { Column, ColumnDef, RowSelectionState, SortingState } from '@tansta
 import { Eye, EyeOff, Pencil } from 'lucide-react';
 import { useLedger } from '../data/context';
 import { api, useLedgerMutation } from '../data/api';
-import { DisplayCurrency, Header, Seg } from '../components/common';
+import { Header, Seg } from '../components/common';
 import { AccountModal } from '../components/AccountModal';
 import { DataTable } from '../components/data-table';
 import { Button } from '@/components/ui/button';
@@ -145,9 +145,7 @@ export function Accounts() {
   return (
     <>
       <Header title="Accounts" subtitle={`${data.accounts.length} accounts${hiddenCount ? `, ${hiddenCount} hidden` : ''}`}
-        primary={<Button onClick={() => setEditing('new')} disabled={!online}>New account<span className="kbd hide-m">N</span></Button>}>
-        <DisplayCurrency />
-      </Header>
+        primary={<Button onClick={() => setEditing('new')} disabled={!online}>New account<span className="kbd hide-m">N</span></Button>} />
       <div className="content">
         <div className="panel" style={{ maxWidth: 1320 }}>
           {sel.length > 0 && (

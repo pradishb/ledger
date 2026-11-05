@@ -29,7 +29,7 @@ export function Seg<K extends string>({ options, value, onChange, className = ''
   );
 }
 
-/** Page header. `primary` replaces the usual New transaction button with the page's own main action. */
+/** Page header, with the display currency picker on every page. `primary` replaces the usual New transaction button with the page's own main action. */
 export function Header({ title, subtitle, children, primary }: { title: string; subtitle?: string; children?: ReactNode; primary?: ReactNode }) {
   const { openAdd, online } = useLedger();
   return (
@@ -39,6 +39,7 @@ export function Header({ title, subtitle, children, primary }: { title: string; 
         {subtitle && <span className="sub">{subtitle}</span>}
       </div>
       {children}
+      <DisplayCurrency />
       {primary ?? (
         <button className="btn-primary hide-m" onClick={openAdd} disabled={!online}>
           New transaction<span className="kbd">N</span>
@@ -118,7 +119,7 @@ export function DisplayCurrency() {
   return (
     <span className="disp-cur" title="Totals are converted to this currency at today's rates">
       <CurrencySelect value={idx.disp} onChange={setDisp} used={data.accounts.map(a => a.currency)} all={all} />
-      <span className="muted small">{note}</span>
+      <span className="muted small hide-m">{note}</span>
     </span>
   );
 }

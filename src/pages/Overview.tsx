@@ -2,7 +2,7 @@ import { useState, type CSSProperties } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { useLedger } from '../data/context';
 import { api, useLedgerMutation } from '../data/api';
-import { Bar, Chevron, DisplayCurrency, Dot, Header, Panel, RangePicker, Seg, useOpenGroups, useRange } from '../components/common';
+import { Bar, Chevron, Dot, Header, Panel, RangePicker, Seg, useOpenGroups, useRange } from '../components/common';
 import { ChartIE, SizedBox } from '../components/Charts';
 import { accountGroups, balColor, flows, sumType, type GroupBy } from '../lib/ledger';
 import { autoUnit, buckets, longDate, rangeDates, rangeName, unitFits, UNIT_NAME, UNITS, type Unit } from '../lib/dates';
@@ -92,7 +92,7 @@ export function Overview() {
 
   return (
     <>
-      <Header title="Overview" subtitle={longDate(today)}><DisplayCurrency /></Header>
+      <Header title="Overview" subtitle={longDate(today)} />
       <div className="content">
         <div className="stack dash">
           {needsSetup && (
