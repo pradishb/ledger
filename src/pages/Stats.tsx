@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router';
 import { Bar, Chevron, Dot, Header, Panel, RangePicker, Seg, useRange } from '../components/common';
 import { txnsLink } from '../lib/links';
 import { flows } from '../lib/ledger';
-import { rangeDates, rangeName } from '../lib/dates';
+import { avgUnit, periodsIn, rangeDates, rangeName, UNITS, type Unit } from '../lib/dates';
 import { fmt } from '../lib/format';
 import { OTHER, rankColor, type CatType } from '../lib/types';
 
@@ -35,7 +35,18 @@ export function Stats() {
     try { localStorage.setItem('ledger.stats.hideNone', JSON.stringify(next)); } catch { /* storage unavailable */ }
   };
 
+  const [avgPick, setAvgPick] = useAvgUnit();
+
   const [from, to] = rangeDates(period, today);
+  // Averages are over the part of the range that has happened: open-ended ranges start at the first
+  // transaction, and days after today (or the last transaction, if later) aren't counted.
+  let first = today, last = today;
+  for (const t of data.txns) { if (t.date < first) first = t.date; if (t.date > last) last = t.date; }
+  let aFrom = from < first ? first : from, aTo = to > last ? last : to;
+  if (aFrom > aTo) [aFrom, aTo] = [from, to];
+  const unit: Unit = avgPick === 'auto' ? avgUnit(aFrom, aTo) : avgPick;
+  const periods = periodsIn(aFrom, aTo, unit);
+  const avg = (x: number) => (periods > 0 ? Math.round(x / periods) : 0);
   const fl = flows(data.txns, from, to, idx).filter(f => idx.catType(f.cat) === type)
     .filter(f => !hideNone[by] || (by === 'cat' ? !!idx.topOf(f.cat) : !!idx.payMap.get(f.payee)));
   const sg = type === 'exp' ? -1 : 1;
@@ -98,6 +109,7 @@ export function Stats() {
   // Size the amount column to the longest amount, so millions never run into the share.
   const amtW = Math.max(0, ...rows.map(r => fmt(r.amount, idx.disp).length));
   const cntW = Math.max(1, ...rows.map(r => String(r.count).length));
+  const avgW = Math.max(0, ...rows.map(r => fmt(avg(r.amount), idx.disp).length));
   const txnCount = new Set(fl.map(f => f.id)).size;
 
   return (
@@ -109,6 +121,11 @@ export function Stats() {
             <Seg value={by} onChange={setBy} options={[['cat', 'By category'], ['payee', 'By payee']] as const} />
             <Seg value={type} onChange={setType} options={[['exp', 'Expenses'], ['inc', 'Income']] as const} />
             <RangePicker value={period} onChange={setPeriod} />
+            <select className="select" value={avgPick} onChange={e => setAvgPick(e.target.value as Unit | 'auto')} aria-label="Average per"
+              title="The average column: the amount per day, week, month… over this range">
+              <option value="auto">Average per {UNIT_NOUN[avgUnit(aFrom, aTo)]} (auto)</option>
+              {UNITS.map(u => <option key={u} value={u}>Average per {UNIT_NOUN[u]}</option>)}
+            </select>
             <label className="check-field" style={{ display: 'flex' }}>
               <input type="checkbox" checked={hideNone[by]} onChange={e => toggleHideNone(e.target.checked)} />
               Hide {by === 'cat' ? '(no category)' : '(no payee)'}
@@ -121,8 +138,9 @@ export function Stats() {
               action={<span className="flex items-baseline gap-2 text-xs text-muted-foreground">
                 {txnCount} transaction{txnCount === 1 ? '' : 's'}
                 <span className="font-mono text-[13px] font-medium" style={{ color: type === 'exp' ? 'var(--out)' : 'var(--inc)' }}>{fmt(total, idx.disp)}</span>
+                <span className="font-mono" title={`Average per ${UNIT_NOUN[unit]}`}>{fmt(avg(total), idx.disp)}/{UNIT_SHORT[unit]}</span>
               </span>}>
-              <div className="panel-body stats-list" style={{ '--amt-w': `${amtW + 1}ch`, '--cnt-w': `${cntW + 1}ch` } as CSSProperties}>
+              <div className="panel-body stats-list" style={{ '--amt-w': `${amtW + 1}ch`, '--cnt-w': `${cntW + 1}ch`, '--avg-w': `${avgW + 1}ch` } as CSSProperties}>
                 {rows.map(r => (
                   <div key={r.key} className={`spend-row${r.href ? ' clickable' : ''}${r.sub ? ' sub' : ''}`}
                     onClick={r.href ? () => navigate(r.href!) : undefined} title={r.href ? `Show ${r.name} transactions` : undefined}>
@@ -139,6 +157,7 @@ export function Stats() {
                     <Bar width={(Math.max(0, r.amount) / mx) * 100} color={r.color} opacity={r.sub ? 0.55 : 1} />
                     <div className="r mono muted" style={{ fontSize: 11.5, opacity: r.sub ? 0.75 : 1 }} title={`${r.count} transaction${r.count === 1 ? '' : 's'}`}>{r.count}</div>
                     <div className="r mono" style={{ fontSize: 12, color: type === 'exp' ? 'var(--out)' : 'var(--inc)', opacity: r.sub ? 0.75 : 1 }}>{fmt(r.amount, idx.disp)}</div>
+                    <div className="r mono muted" style={{ fontSize: 11.5, opacity: r.sub ? 0.75 : 1 }} title={`Average per ${UNIT_NOUN[unit]}`}>{fmt(avg(r.amount), idx.disp)}</div>
                     <div className="r mono muted" style={{ fontSize: 11.5 }}>{pct(r.amount)}</div>
                   </div>
                 ))}
@@ -150,4 +169,20 @@ export function Stats() {
       </div>
     </>
   );
+}
+
+const UNIT_NOUN: Record<Unit, string> = { day: 'day', week: 'week', month: 'month', quarter: 'quarter', year: 'year' };
+const UNIT_SHORT: Record<Unit, string> = { day: 'day', week: 'wk', month: 'mo', quarter: 'qtr', year: 'yr' };
+
+/** The unit for the average column, or 'auto' to suit the range; remembered per device. */
+function useAvgUnit() {
+  const key = 'ledger.stats.avg';
+  const [u, setU] = useState<Unit | 'auto'>(() => {
+    try { const v = localStorage.getItem(key) as Unit; return UNITS.includes(v) ? v : 'auto'; } catch { return 'auto'; }
+  });
+  const set = (v: Unit | 'auto') => {
+    setU(v);
+    try { localStorage.setItem(key, v); } catch { /* storage unavailable */ }
+  };
+  return [u, set] as const;
 }

@@ -160,6 +160,24 @@ export function autoUnit(from: string, to: string): Unit {
   return span <= 31 ? 'day' : span <= 92 ? 'week' : span <= 1100 ? 'month' : 'year';
 }
 
+/** How many `unit`s [from, to] spans, counting part-covered months by their share of days, so Last Month is exactly 1 month. */
+export function periodsIn(from: string, to: string, unit: Unit): number {
+  if (unit === 'day' || unit === 'week') return spanDays(from, to) / (unit === 'day' ? 1 : 7);
+  const [fy, fm] = parts(from), [ty, tm] = parts(to);
+  let months = 0;
+  for (let [y, m] = [fy, fm]; y * 12 + m <= ty * 12 + tm; [y, m] = addMonths(y, m, 1)) {
+    const s = ymd(y, m, 1), e = ymd(y, m, lastDay(y, m));
+    months += spanDays(s < from ? from : s, e > to ? to : e) / lastDay(y, m);
+  }
+  return unit === 'month' ? months : months / (unit === 'quarter' ? 3 : 12);
+}
+
+/** The unit an average over [from, to] reads best in: one step finer than the range (a month's average per week). */
+export function avgUnit(from: string, to: string): Unit {
+  const span = spanDays(from, to);
+  return span <= 14 ? 'day' : span <= 92 ? 'week' : span <= 1100 ? 'month' : 'year';
+}
+
 /** Whether charting [from, to] by `unit` stays under MAX_BARS bars. */
 export const unitFits = (from: string, to: string, unit: Unit) => spanDays(from, to) / UNIT_DAYS[unit] <= MAX_BARS;
 
