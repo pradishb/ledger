@@ -112,11 +112,16 @@ export const api = {
 
   addCategory: async (c: { name: string; parent: number; type: CatType; color: string | null }) =>
     void check(await supabase.from('categories').insert({ name: c.name, parent_id: c.parent || null, type: c.type, color: c.color })),
+  /** Rename or move a category; a top-level category's subcategories take its type with it. */
+  updateCategory: async (c: { id: number; name: string; parent: number; type: CatType; color: string | null }) => {
+    check(await supabase.from('categories').update({ name: c.name, parent_id: c.parent || null, type: c.type, color: c.color }).eq('id', c.id));
+    if (!c.parent) check(await supabase.from('categories').update({ type: c.type }).eq('parent_id', c.id));
+  },
   deleteCategory: async (id: number) => void check(await supabase.from('categories').delete().eq('id', id)),
 
   addPayee: async (p: { name: string; match: string[] }) => void check(await supabase.from('payees').insert({ name: p.name, match: p.match })),
-  updatePayee: async ({ id, match }: { id: number; match: string[] }) =>
-    void check(await supabase.from('payees').update({ match }).eq('id', id)),
+  updatePayee: async ({ id, ...patch }: { id: number; name?: string; match?: string[] }) =>
+    void check(await supabase.from('payees').update(patch).eq('id', id)),
   /** Give existing transactions without a payee the one their memo matches; returns how many. */
   applyPayeeMatch: async () => check(await supabase.rpc('apply_payee_match')).data as number,
   deletePayee: async (id: number) => void check(await supabase.from('payees').delete().eq('id', id)),
