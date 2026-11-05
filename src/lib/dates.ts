@@ -129,7 +129,8 @@ export function rangeDates(k: Range, today: string): [string, string] {
     case 'l90': return days(90);
     case 'l60': return days(60);
     case 'l30': return days(30);
-    case 'l12m': return [month(-12)[0], month(-1)[1]];
+    // This month so far and the 11 before it.
+    case 'l12m': return [month(-11)[0], today];
     case 'around': return [addDays(today, -15), addDays(today, 15)];
     case 'all': return ['0000', '9999'];
   }
