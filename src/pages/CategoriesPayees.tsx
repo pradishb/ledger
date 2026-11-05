@@ -3,15 +3,14 @@ import { useEffect, useRef, useState } from 'react';
 import { useLedger } from '../data/context';
 import { api, useLedgerMutation } from '../data/api';
 import { Dot, Header, Seg, useUrlChoice, useUrlText } from '../components/common';
-import { rangeDates } from '../lib/dates';
 import { txnsLink } from '../lib/links';
-import { errorMessage, fmt } from '../lib/format';
+import { errorMessage } from '../lib/format';
 import { OTHER, type CatType } from '../lib/types';
 import { CategoryModal, PayeeModal } from '../components/CatPayeeModals';
 import { Button } from '@/components/ui/button';
 
 export function CategoriesPayees() {
-  const { data, idx, today, online, toast, setNewShortcut } = useLedger();
+  const { data, idx, online, toast, setNewShortcut } = useLedger();
   const [tab, setTab] = useUrlChoice('tab', ['cat', 'payee'] as const, 'cat');
   const [catType, setCatType] = useUrlChoice<CatType>('type', ['exp', 'inc'], 'exp');
   // Which New dialog is open.
@@ -34,25 +33,14 @@ export function CategoriesPayees() {
   const run = <A,>(m: { mutateAsync: (a: A) => Promise<unknown> }, arg: A, ok?: string) =>
     m.mutateAsync(arg).then(() => ok && toast(ok), e => toast(errorMessage(e)));
 
-  // Usage counts (all time) and 12-month totals.
-  const [f12, t12] = rangeDates('l12m', today);
-  const cnt = new Map<number, number>(), tot = new Map<number, number>();
-  const pcnt = new Map<number, number>(), ptot = new Map<number, number>();
-  const inc = (m: Map<number, number>, k: number, v: number) => m.set(k, (m.get(k) ?? 0) + v);
+  // How many transactions use each category and payee.
+  const cnt = new Map<number, number>(), pcnt = new Map<number, number>();
+  const inc = (m: Map<number, number>, k: number) => m.set(k, (m.get(k) ?? 0) + 1);
   for (const t of data.txns) {
-    if (t.payee) inc(pcnt, t.payee, 1);
-    const entries = t.splits ?? (t.cat ? [{ cat: t.cat, amount: t.amount }] : []);
-    for (const e of entries) {
-      inc(cnt, e.cat, 1);
-      if (t.date >= f12 && t.date <= t12) {
-        const v = idx.toDisp(t.acc, e.amount);
-        inc(tot, e.cat, v);
-        if (t.payee) inc(ptot, t.payee, v);
-      }
-    }
+    if (t.payee) inc(pcnt, t.payee);
+    for (const e of t.splits ?? (t.cat ? [{ cat: t.cat }] : [])) inc(cnt, e.cat);
   }
 
-  const sg = catType === 'exp' ? -1 : 1;
   const tops = idx.tops.filter(c => c.type === catType);
 
   function assignExisting() {
@@ -83,9 +71,7 @@ export function CategoriesPayees() {
                 <thead>
                   <tr>
                     <th>Category</th>
-                    <th className="r hide-m" style={{ width: 110 }}>Transactions</th>
-                    <th className="r" style={{ width: 130 }}>Last 12 months</th>
-                    <th className="r hide-m" style={{ width: 110 }}>Avg / mo</th>
+                    <th className="r" style={{ width: 110 }}>Transactions</th>
                     <th style={{ width: 70 }} />
                   </tr>
                 </thead>
@@ -93,25 +79,20 @@ export function CategoriesPayees() {
                   {tops.map(c => {
                     const subs = idx.subsOf(c.id);
                     const tc = (cnt.get(c.id) ?? 0) + subs.reduce((a, x) => a + (cnt.get(x.id) ?? 0), 0);
-                    const tt = sg * ((tot.get(c.id) ?? 0) + subs.reduce((a, x) => a + (tot.get(x.id) ?? 0), 0));
                     const canDelete = tc === 0 && !subs.length;
                     const color = c.color ?? OTHER;
                     return [
                       <tr className="group" key={c.id}>
                         <td><span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}><Dot color={color} /><Link className="name-link" style={{ fontWeight: 600 }} to={txnsLink({ category: c.id })}>{c.name}</Link></span></td>
-                        <td className="num hide-m" style={{ color: 'var(--ink2)' }}>{tc}</td>
-                        <td className="num" style={{ fontWeight: 600, color: tt ? (catType === 'exp' ? 'var(--out)' : 'var(--inc)') : 'var(--ink3)' }}>{fmt(tt, idx.disp)}</td>
-                        <td className="num hide-m" style={{ color: 'var(--ink2)' }}>{fmt(Math.round(tt / 12), idx.disp)}</td>
+                        <td className="num" style={{ color: 'var(--ink2)' }}>{tc}</td>
                         <td className="r">{canDelete && <button className="link danger" disabled={!online} onClick={() => run(delCat, c.id)}>Delete</button>}</td>
                       </tr>,
                       ...subs.map(x => {
-                        const n = cnt.get(x.id) ?? 0, sv = sg * (tot.get(x.id) ?? 0);
+                        const n = cnt.get(x.id) ?? 0;
                         return (
                           <tr key={x.id}>
                             <td style={{ paddingLeft: 38 }}><Link className="name-link" to={txnsLink({ category: x.id })}>{x.name}</Link></td>
-                            <td className="num hide-m" style={{ color: 'var(--ink2)' }}>{n}</td>
-                            <td className="num" style={{ color: sv ? (catType === 'exp' ? 'var(--out)' : 'var(--inc)') : 'var(--ink3)', opacity: 0.8 }}>{fmt(sv, idx.disp)}</td>
-                            <td className="num hide-m" style={{ color: 'var(--ink2)' }}>{fmt(Math.round(sv / 12), idx.disp)}</td>
+                            <td className="num" style={{ color: 'var(--ink2)' }}>{n}</td>
                             <td className="r">{n === 0 && <button className="link danger" disabled={!online} onClick={() => run(delCat, x.id)}>Delete</button>}</td>
                           </tr>
                         );
@@ -132,19 +113,17 @@ export function CategoriesPayees() {
                   title="Give existing transactions without a payee the one their memo matches">Assign payees</button>
               </div>
               <div className="scroll-x">
-                <table className="tbl tbl-fixed" style={{ minWidth: 640 }}>
+                <table className="tbl tbl-fixed" style={{ minWidth: 520 }}>
                   <thead>
                     <tr>
                       <th>Payee</th>
                       <th style={{ width: 320 }}>Matches memo</th>
                       <th className="r" style={{ width: 100 }}>Transactions</th>
-                      <th className="r" style={{ width: 120 }}>Last 12 months</th>
                       <th style={{ width: 64 }} />
                     </tr>
                   </thead>
                   <tbody>
                     {payees.map(p => {
-                      const tt = ptot.get(p.id) ?? 0;
                       const used = pcnt.get(p.id) ?? 0;
                       return (
                         <tr key={p.id}>
@@ -154,7 +133,6 @@ export function CategoriesPayees() {
                               onSave={match => run(updPayee, { id: p.id, match }, `Saved patterns for “${p.name}”`)} />
                           </td>
                           <td className="num" style={{ color: 'var(--ink2)' }}>{used}</td>
-                          <td className="num" style={{ color: tt > 0 ? 'var(--inc)' : tt < 0 ? 'var(--out)' : 'var(--ink3)' }}>{fmt(tt, idx.disp)}</td>
                           <td className="r">{!used && <button className="link danger" disabled={!online} onClick={() => run(delPayee, p.id)}>Delete</button>}</td>
                         </tr>
                       );
