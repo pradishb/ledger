@@ -1,7 +1,7 @@
 import { useState, type CSSProperties } from 'react';
 import { useLedger } from '../data/context';
 import { useNavigate } from 'react-router';
-import { Bar, Chevron, Dot, Header, Panel, RangePicker, Seg, useRange } from '../components/common';
+import { Bar, Chevron, Dot, Header, Panel, RangePicker, Seg, useRange, useUrlChoice, useUrlIds } from '../components/common';
 import { txnsLink } from '../lib/links';
 import { flows } from '../lib/ledger';
 import { avgUnit, periodsIn, rangeDates, rangeName, UNITS, type Unit } from '../lib/dates';
@@ -21,10 +21,10 @@ interface Row {
 export function Stats() {
   const { data, idx, today } = useLedger();
   const navigate = useNavigate();
-  const [by, setBy] = useState<'cat' | 'payee'>('cat');
-  const [type, setType] = useState<CatType>('exp');
+  const [by, setBy] = useUrlChoice('by', ['cat', 'payee'] as const, 'cat');
+  const [type, setType] = useUrlChoice<CatType>('type', ['exp', 'inc'], 'exp');
   const [period, setPeriod] = useRange('stats', 'lmonth');
-  const [expanded, setExpanded] = useState<Record<number, boolean>>({});
+  const [expanded, setExpanded] = useUrlIds('open');
   // Leave out entries without a category (By category) or payee (By payee), remembered per device.
   const [hideNone, setHideNone] = useState<Record<'cat' | 'payee', boolean>>(() => {
     try { return { cat: false, payee: false, ...JSON.parse(localStorage.getItem('ledger.stats.hideNone') ?? '{}') }; } catch { return { cat: false, payee: false }; }

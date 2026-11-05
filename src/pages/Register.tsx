@@ -3,7 +3,7 @@ import type { ColumnDef, RowSelectionState } from '@tanstack/react-table';
 import { useSearchParams } from 'react-router';
 import { useLedger } from '../data/context';
 import { api, useLedgerMutation } from '../data/api';
-import { Header, RangePicker, useRange } from '../components/common';
+import { Header, RangePicker, useRange, useUrlText } from '../components/common';
 import { AccountModal } from '../components/AccountModal';
 import { DataTable } from '../components/data-table';
 import { Button } from '@/components/ui/button';
@@ -33,7 +33,7 @@ export function Register() {
     return next;
   }, { replace: true });
   const { data, idx, bal, today, openEdit, isMobile, online, toast } = useLedger();
-  const [q, setQ] = useState('');
+  const [q, setQ] = useUrlText('q');
   const [range, setRange] = useRange('register', 'l90');
   const [editing, setEditing] = useState(false);
   const [selection, setSelection] = useState<RowSelectionState>({});
@@ -218,7 +218,7 @@ export function Register() {
       {[...data.payees].sort((x, y) => x.name.localeCompare(y.name)).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
     </select>
     {anyFilter && (
-      <Button variant="link" size="sm" className="h-auto px-0" onClick={() => { setQ(''); setParams(new URLSearchParams(), { replace: true }); }}>Clear filters</Button>
+      <Button variant="link" size="sm" className="h-auto px-0" onClick={() => setParams(new URLSearchParams(), { replace: true })}>Clear filters</Button>
     )}
   </>;
   const balanceNote = b !== undefined && (

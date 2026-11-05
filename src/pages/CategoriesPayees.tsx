@@ -2,7 +2,7 @@ import { Link } from 'react-router';
 import { useEffect, useState } from 'react';
 import { useLedger } from '../data/context';
 import { api, useLedgerMutation } from '../data/api';
-import { Dot, Header, Seg } from '../components/common';
+import { Dot, Header, Seg, useUrlChoice, useUrlText } from '../components/common';
 import { rangeDates } from '../lib/dates';
 import { txnsLink } from '../lib/links';
 import { errorMessage, fmt } from '../lib/format';
@@ -10,12 +10,12 @@ import { OTHER, PALETTE, type CatType } from '../lib/types';
 
 export function CategoriesPayees() {
   const { data, idx, today, online, toast } = useLedger();
-  const [tab, setTab] = useState<'cat' | 'payee'>('cat');
-  const [catType, setCatType] = useState<CatType>('exp');
+  const [tab, setTab] = useUrlChoice('tab', ['cat', 'payee'] as const, 'cat');
+  const [catType, setCatType] = useUrlChoice<CatType>('type', ['exp', 'inc'], 'exp');
   const [newCat, setNewCat] = useState('');
   const [newParent, setNewParent] = useState('0');
   const [newPayee, setNewPayee] = useState('');
-  const [payeeQ, setPayeeQ] = useState('');
+  const [payeeQ, setPayeeQ] = useUrlText('q');
 
   const addCat = useLedgerMutation(api.addCategory);
   const delCat = useLedgerMutation(api.deleteCategory);

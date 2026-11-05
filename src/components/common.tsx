@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils';
 import { useState, type ReactNode } from 'react';
 import { isRange, RANGE_ROWS, rangeDates, rangeLabel, rangeName, type Range } from '../lib/dates';
 import { useLedger } from '../data/context';
+import { useSearchParams } from 'react-router';
 
 /**
  * A segmented switch (one of a few options). Radix ToggleGroup gives it arrow-key navigation and
@@ -126,6 +127,40 @@ export function DisplayCurrency() {
 
 const shortDate = (s: string) =>
   new Date(s + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+
+/**
+ * A page's view choice (By payee, Income…) kept in the URL as ?key=value, so Back returns to the
+ * same view. Changing it replaces the history entry instead of adding one; the default is left out.
+ */
+export function useUrlChoice<K extends string>(key: string, options: readonly K[], initial: K) {
+  const [raw, setRaw] = useUrlText(key);
+  const value = options.find(o => o === raw) ?? initial;
+  const set = (v: K) => setRaw(v === initial ? '' : v);
+  return [value, set] as const;
+}
+
+/** Free text kept in the URL as ?key=text (a search box), the same way; empty is left out. */
+export function useUrlText(key: string) {
+  const [params, setParams] = useSearchParams();
+  const value = params.get(key) ?? '';
+  const set = (v: string) => setParams(prev => {
+    const next = new URLSearchParams(prev);
+    if (v) next.set(key, v); else next.delete(key);
+    return next;
+  }, { replace: true });
+  return [value, set] as const;
+}
+
+/** A set of ids kept in the URL as ?key=3,7 (expanded rows, hidden series), as { id: true }. */
+export function useUrlIds(key: string) {
+  const [raw, setRaw] = useUrlText(key);
+  const ids: Record<number, boolean> = Object.fromEntries(raw.split(',').filter(Boolean).map(x => [Number(x), true]));
+  const set = (v: Record<number, boolean> | ((prev: Record<number, boolean>) => Record<number, boolean>)) => {
+    const next = typeof v === 'function' ? v(ids) : v;
+    setRaw(Object.keys(next).filter(k => next[+k]).join(','));
+  };
+  return [ids, set] as const;
+}
 
 /** A date range choice remembered per device under `key`. */
 export function useRange(key: string, initial: Range) {

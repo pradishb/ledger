@@ -1,6 +1,6 @@
 import { useState, type MouseEvent, type ReactNode } from 'react';
 import { useLedger } from '../data/context';
-import { Dot, Header, RangePicker, Seg, useRange } from '../components/common';
+import { Dot, Header, RangePicker, Seg, useRange, useUrlChoice, useUrlIds } from '../components/common';
 import { ChartIE, ChartStack, Sized, type Series } from '../components/Charts';
 import { balColor, flows, sumType } from '../lib/ledger';
 import { buckets, rangeDates, rangeLabel, unitFits, UNIT_NAME, type Unit } from '../lib/dates';
@@ -12,10 +12,10 @@ interface Row { name: string; color: string; cells: Cell[]; total: string; avg: 
 
 export function Trend() {
   const { data, idx, today } = useLedger();
-  const [mode, setMode] = useState<'ie' | 'cat'>('ie');
+  const [mode, setMode] = useUrlChoice('mode', ['ie', 'cat'] as const, 'ie');
   const [range, setRange] = useRange('trend', 'l12m');
   const [unit, setUnit] = useTrendUnit();
-  const [hidden, setHidden] = useState<Record<number, boolean>>({});
+  const [hidden, setHidden] = useUrlIds('hide');
 
   // The chosen range, trimmed to where the transactions are (for open-ended ranges like All dates),
   // split into one column per period.

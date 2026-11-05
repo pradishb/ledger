@@ -4,7 +4,7 @@ import type { Column, ColumnDef, RowSelectionState, SortingState } from '@tansta
 import { Eye, EyeOff, Pencil } from 'lucide-react';
 import { useLedger } from '../data/context';
 import { api, useLedgerMutation } from '../data/api';
-import { Header, Seg } from '../components/common';
+import { Header, Seg, useUrlText } from '../components/common';
 import { AccountModal } from '../components/AccountModal';
 import { DataTable } from '../components/data-table';
 import { Button } from '@/components/ui/button';
@@ -31,7 +31,7 @@ export function Accounts() {
   // The account being edited, or 'new' while adding one.
   const [editing, setEditing] = useState<Account | 'new' | null>(null);
   const [prefs, setPrefs] = usePrefs();
-  const [q, setQ] = useState('');
+  const [q, setQ] = useUrlText('q');
 
   // N opens New account here instead of New transaction (but not over an open dialog).
   const editingRef = useRef(editing);
