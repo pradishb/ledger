@@ -114,7 +114,7 @@ export const api = {
     void check(await supabase.from('categories').insert({ name: c.name, parent_id: c.parent || null, type: c.type, color: c.color })),
   deleteCategory: async (id: number) => void check(await supabase.from('categories').delete().eq('id', id)),
 
-  addPayee: async (name: string) => void check(await supabase.from('payees').insert({ name })),
+  addPayee: async (p: { name: string; match: string[] }) => void check(await supabase.from('payees').insert({ name: p.name, match: p.match })),
   updatePayee: async ({ id, match }: { id: number; match: string[] }) =>
     void check(await supabase.from('payees').update({ match }).eq('id', id)),
   /** Give existing transactions without a payee the one their memo matches; returns how many. */

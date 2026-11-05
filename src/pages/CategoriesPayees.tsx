@@ -1,28 +1,35 @@
 import { Link } from 'react-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useLedger } from '../data/context';
 import { api, useLedgerMutation } from '../data/api';
 import { Dot, Header, Seg, useUrlChoice, useUrlText } from '../components/common';
 import { rangeDates } from '../lib/dates';
 import { txnsLink } from '../lib/links';
 import { errorMessage, fmt } from '../lib/format';
-import { OTHER, PALETTE, type CatType } from '../lib/types';
+import { OTHER, type CatType } from '../lib/types';
+import { CategoryModal, PayeeModal } from '../components/CatPayeeModals';
+import { Button } from '@/components/ui/button';
 
 export function CategoriesPayees() {
-  const { data, idx, today, online, toast } = useLedger();
+  const { data, idx, today, online, toast, setNewShortcut } = useLedger();
   const [tab, setTab] = useUrlChoice('tab', ['cat', 'payee'] as const, 'cat');
   const [catType, setCatType] = useUrlChoice<CatType>('type', ['exp', 'inc'], 'exp');
-  const [newCat, setNewCat] = useState('');
-  const [newParent, setNewParent] = useState('0');
-  const [newPayee, setNewPayee] = useState('');
+  // Which New dialog is open.
+  const [adding, setAdding] = useState<'cat' | 'payee' | null>(null);
   const [payeeQ, setPayeeQ] = useUrlText('q');
 
-  const addCat = useLedgerMutation(api.addCategory);
   const delCat = useLedgerMutation(api.deleteCategory);
-  const addPayee = useLedgerMutation(api.addPayee);
   const updPayee = useLedgerMutation(api.updatePayee);
   const delPayee = useLedgerMutation(api.deletePayee);
   const applyMatch = useLedgerMutation(api.applyPayeeMatch);
+
+  // N opens New category or New payee for the tab shown (but not over an open dialog).
+  const state = useRef({ tab, adding });
+  useEffect(() => { state.current = { tab, adding }; }, [tab, adding]);
+  useEffect(() => {
+    setNewShortcut(() => { if (!state.current.adding) setAdding(state.current.tab); });
+    return () => setNewShortcut(null);
+  }, [setNewShortcut]);
 
   const run = <A,>(m: { mutateAsync: (a: A) => Promise<unknown> }, arg: A, ok?: string) =>
     m.mutateAsync(arg).then(() => ok && toast(ok), e => toast(errorMessage(e)));
@@ -48,20 +55,6 @@ export function CategoriesPayees() {
   const sg = catType === 'exp' ? -1 : 1;
   const tops = idx.tops.filter(c => c.type === catType);
 
-  function submitCat() {
-    const name = newCat.trim();
-    if (!name) return;
-    const parent = +newParent;
-    run(addCat, { name, parent, type: catType, color: parent ? null : PALETTE[idx.tops.length % PALETTE.length] }, `Added “${name}”`)
-      .then(() => setNewCat(''));
-  }
-  function submitPayee() {
-    const name = newPayee.trim();
-    if (!name) return;
-    if (data.payees.some(p => p.name.toLowerCase() === name.toLowerCase())) return toast('That payee already exists');
-    run(addPayee, name, `Added “${name}”`).then(() => setNewPayee(''));
-  }
-
   function assignExisting() {
     if (!confirm('Give every existing transaction without a payee the payee its memo matches? Payees already set are kept.')) return;
     applyMatch.mutateAsync(undefined).then(
@@ -73,7 +66,8 @@ export function CategoriesPayees() {
 
   return (
     <>
-      <Header title="Categories & payees" subtitle={`${data.cats.length} categories · ${data.payees.length} payees`} />
+      <Header title="Categories & payees" subtitle={`${data.cats.length} categories · ${data.payees.length} payees`}
+        primary={<Button onClick={() => setAdding(tab)} disabled={!online}>{tab === 'cat' ? 'New category' : 'New payee'}<span className="kbd hide-m">N</span></Button>} />
       <div className="content">
         <div className="stack" style={{ maxWidth: 1100 }}>
           <div className="toolbar">
@@ -83,15 +77,7 @@ export function CategoriesPayees() {
           {tab === 'cat' ? (
             <div className="panel">
               <div className="inline-form">
-                <Seg value={catType} onChange={k => { setCatType(k); setNewParent('0'); }} options={[['exp', 'Expense'], ['inc', 'Income']] as const} />
-                <div className="spacer hide-m" />
-                <input className="input" style={{ width: 200 }} placeholder="New category name" value={newCat}
-                  onChange={e => setNewCat(e.target.value)} onKeyDown={e => e.key === 'Enter' && submitCat()} />
-                <select className="select" value={newParent} onChange={e => setNewParent(e.target.value)}>
-                  <option value="0">Top level</option>
-                  {tops.map(c => <option key={c.id} value={c.id}>Under {c.name}</option>)}
-                </select>
-                <button className="btn sm" onClick={submitCat} disabled={!online || addCat.isPending}>Add</button>
+                <Seg value={catType} onChange={setCatType} options={[['exp', 'Expense'], ['inc', 'Income']] as const} />
               </div>
               <table className="tbl">
                 <thead>
@@ -142,9 +128,6 @@ export function CategoriesPayees() {
                 <input className="input" style={{ width: 200 }} placeholder="Filter payees" value={payeeQ} onChange={e => setPayeeQ(e.target.value)} />
                 <span className="muted hide-m" style={{ fontSize: 12 }}>New transactions get the payee whose memo pattern they contain (whole words, any case). Separate patterns with commas.</span>
                 <div className="spacer hide-m" />
-                <input className="input" style={{ width: 200 }} placeholder="New payee name" value={newPayee}
-                  onChange={e => setNewPayee(e.target.value)} onKeyDown={e => e.key === 'Enter' && submitPayee()} />
-                <button className="btn sm" onClick={submitPayee} disabled={!online || addPayee.isPending}>Add</button>
                 <button className="btn sm" onClick={assignExisting} disabled={!online || applyMatch.isPending}
                   title="Give existing transactions without a payee the one their memo matches">Assign payees</button>
               </div>
@@ -184,6 +167,8 @@ export function CategoriesPayees() {
           )}
         </div>
       </div>
+      {adding === 'cat' && <CategoryModal type={catType} onClose={() => setAdding(null)} />}
+      {adding === 'payee' && <PayeeModal onClose={() => setAdding(null)} />}
     </>
   );
 }
