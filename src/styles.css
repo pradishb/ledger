@@ -42,7 +42,9 @@ a { color: var(--acc); }
 .dot { width: 8px; height: 8px; border-radius: 2px; flex: none; display: inline-block; }
 
 /* ---------- shell */
-.app { display: grid; grid-template-columns: 228px minmax(0, 1fr); height: 100vh; height: 100dvh; }
+/* One fixed row: other children (the toaster's section, the modal) land in extra rows instead of sharing the height. */
+.app { display: grid; grid-template-columns: 228px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); height: 100vh; height: 100dvh; }
+.side, .main { grid-row: 1; }
 .side { display: flex; flex-direction: column; min-height: 0; background: var(--sunk); border-right: 1px solid var(--line); }
 .brand { display: flex; align-items: center; gap: 9px; padding: 15px 18px 12px; font-weight: 600; font-size: 14px; letter-spacing: -0.01em; }
 .logo { width: 22px; height: 22px; border-radius: 6px; background: var(--acc); color: var(--accInk); display: grid; place-items: center; font-weight: 700; font-size: 12px; }
