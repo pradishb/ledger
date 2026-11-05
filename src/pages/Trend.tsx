@@ -1,7 +1,7 @@
 import { useState, type MouseEvent, type ReactNode } from 'react';
 import { useLedger } from '../data/context';
 import { Dot, Header, Panel, RangePicker, Seg, useRange, useUrlChoice, useUrlIds } from '../components/common';
-import { ChartIE, ChartLine, ChartStack, Sized, SizedBox, type Series } from '../components/Charts';
+import { ChartBars, ChartIE, ChartLine, ChartStack, Sized, SizedBox, type Series } from '../components/Charts';
 import { balColor, flows, sumType } from '../lib/ledger';
 import { addDays, buckets, rangeDates, rangeLabel, unitFits, UNIT_NAME, type Unit } from '../lib/dates';
 import { fmt0 } from '../lib/format';
@@ -38,12 +38,28 @@ export function Trend() {
   let legend: { key: string; name: string; color: string; op: number; onClick?: (e: MouseEvent) => void }[];
   let chart: (w: number) => ReactNode;
   let nwView: ReactNode = null;
+  // Income vs expenses: a second chart of the net (income minus expenses) each period.
+  let savedPanel: ReactNode = null;
 
   if (mode === 'ie') {
     const inc = mfl.map(f => sumType(f, 'inc', idx)), exp = mfl.map(f => sumType(f, 'exp', idx));
     const net = inc.map((x, i) => x - exp[i]);
     chart = w => <ChartIE months={months.map((m, i) => ({ ...m, inc: inc[i], exp: exp[i] }))} w={w} h={220} />;
     legend = [{ key: 'i', name: 'Income', color: 'var(--acc)', op: 1 }, { key: 'e', name: 'Expenses', color: 'var(--exp)', op: 1 }];
+    const rate = T(inc) ? Math.round((T(net) / T(inc)) * 100) : null;
+    savedPanel = (
+      <Panel title="Net" action={
+        <span className="text-xs text-muted-foreground">
+          <b className="font-mono text-[13px] font-medium" style={{ color: balColor(T(net)) }}>{fmt0(T(net), idx.disp)}</b>
+          {rate !== null && ` · ${rate}% of income`}
+        </span>
+      }>
+        <div style={{ padding: '14px 12px 8px' }}>
+          <Sized>{w => <ChartBars months={months} values={net} name="Net" w={w} h={180}
+            pct={i => (inc[i] > 0 ? ` · ${Math.round((net[i] / inc[i]) * 100)}% of income` : '')} />}</Sized>
+        </div>
+      </Panel>
+    );
     rows = [
       { name: 'Income', color: 'var(--acc)', cells: inc.map(x => cell(x, 'var(--inc)')), total: fmt0(T(inc), idx.disp), avg: fmt0(T(inc) / N, idx.disp), totColor: 'var(--inc)', weight: 400, op: 1 },
       { name: 'Expenses', color: 'var(--exp)', cells: exp.map(x => cell(x, 'var(--out)')), total: fmt0(T(exp), idx.disp), avg: fmt0(T(exp) / N, idx.disp), totColor: 'var(--out)', weight: 400, op: 1 },
@@ -179,6 +195,8 @@ export function Trend() {
             </div>
             <div style={{ padding: '14px 12px 8px' }}><Sized>{chart}</Sized></div>
           </div>
+
+          {savedPanel}
 
           <div className="panel scroll-x">
             <table className="tbl" style={{ minWidth: 900 }}>

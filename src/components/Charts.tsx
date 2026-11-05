@@ -163,3 +163,36 @@ export function ChartLine({ months, values, w, h, color = 'var(--acc)', name }: 
   });
   return <svg viewBox={`0 0 ${w} ${h}`} width="100%" style={{ display: 'block' }}>{els}</svg>;
 }
+
+/** One bar per period that can be negative (savings): green above zero, red below, with a zero line. */
+export function ChartBars({ months, values, w, h, name, pct }: {
+  months: Month[]; values: number[]; w: number; h: number; name: string;
+  /** Extra text for each bar's tooltip, e.g. its share of income. */
+  pct?: (i: number) => string;
+}) {
+  const cur = useLedger().idx.disp;
+  const iw = w - P.l - P.r, ih = h - P.t - P.b;
+  const hiVal = Math.max(0, ...values), loVal = Math.min(0, ...values);
+  // Round steps from below zero (if anything is) to above the largest bar.
+  const step = niceMax(Math.max(1, hiVal - loVal) / 4);
+  const top = Math.max(step, Math.ceil(hiVal / step) * step), bot = -Math.ceil(-loVal / step) * step;
+  const span = top - bot;
+  const y = (v: number) => P.t + ih - ((v - bot) / span) * ih;
+  const gw = iw / Math.max(1, months.length), bw = Math.max(1, Math.min(28, gw * 0.56));
+  const every = Math.max(1, Math.ceil(46 / gw));
+  const els: ReactElement[] = [];
+  for (let i = 0, v = bot; v <= top + step / 2; i++, v += step) {
+    const gy = y(v);
+    els.push(<line key={`g${i}`} x1={P.l} x2={w - P.r} y1={gy} y2={gy} style={{ stroke: Math.abs(v) < step / 2 ? 'var(--ink3)' : 'var(--line)' }} />);
+    els.push(<text key={`t${i}`} x={P.l - 8} y={gy + 3.5} textAnchor="end" style={TXT}>{fmtK(v, cur)}</text>);
+  }
+  months.forEach((m, i) => {
+    const cx = P.l + i * gw + gw / 2, v = values[i];
+    const y0 = y(Math.max(0, v)), hh = Math.abs(y(v) - y(0));
+    els.push(<rect key={`b${i}`} x={cx - bw / 2} y={y0} width={bw} height={hh} rx={2} style={{ fill: v < 0 ? 'var(--out)' : 'var(--inc)' }}>
+      <title>{`${m.full} · ${name}: ${fmt(v, cur)}${pct ? pct(i) : ''}`}</title>
+    </rect>);
+    if ((months.length - 1 - i) % every === 0) els.push(<text key={`l${i}`} x={cx} y={h - 6} textAnchor="middle" style={LBL}>{m.label}</text>);
+  });
+  return <svg viewBox={`0 0 ${w} ${h}`} width="100%" style={{ display: 'block' }}>{els}</svg>;
+}
