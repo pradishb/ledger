@@ -155,7 +155,12 @@ export function Overview() {
               </div>
             </Panel>
 
-            <Panel title="Where your money goes" action={<RangePicker compact alignRight value={sRange} onChange={setSRange} />}>
+            <Panel title="Spendings" action={
+              <div className="panel-tools">
+                <span className="font-mono text-[13px] font-medium" style={{ color: 'var(--out)' }} title="Total spending in this period">{fmt(sExp, idx.disp)}</span>
+                <RangePicker compact alignRight value={sRange} onChange={setSRange} />
+              </div>
+            }>
               <div className="panel-body" style={{ '--amt-w': `${amtW + 1}ch` } as CSSProperties}>
                 {spend.map((x, i) => (
                   <div className="spend-row clickable" key={x.c.id} title={`Show ${x.c.name} transactions`}

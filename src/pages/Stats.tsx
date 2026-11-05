@@ -132,9 +132,9 @@ export function Stats() {
             </label>
           </div>
 
-          {/* One list, like the Overview's "Where your money goes": name, bar, amount, share. */}
+          {/* One list, like the Overview's Spendings: name, bar, amount, share. */}
           <div style={{ maxWidth: 920 }}>
-            <Panel title={`${type === 'exp' ? 'Where your money goes' : 'Where your money comes from'} · ${by === 'cat' ? 'by category' : 'by payee'}`}
+            <Panel title={`${type === 'exp' ? 'Spendings' : 'Income'} · ${by === 'cat' ? 'by category' : 'by payee'}`}
               action={<span className="flex items-baseline gap-2 text-xs text-muted-foreground">
                 {txnCount} transaction{txnCount === 1 ? '' : 's'}
                 <span className="font-mono text-[13px] font-medium" style={{ color: type === 'exp' ? 'var(--out)' : 'var(--inc)' }}>{fmt(total, idx.disp)}</span>
