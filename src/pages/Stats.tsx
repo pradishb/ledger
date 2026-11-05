@@ -12,7 +12,7 @@ interface Row {
   key: string; name: string; color: string; amount: number; sub: boolean;
   /** How many transactions it's made of. */
   count: number;
-  /** Where clicking the row goes: its transactions for this period (none for "(no category)", which Transactions can't filter by). */
+  /** Where clicking the row goes: its transactions for this period. */
   href?: string;
   /** For a category with subcategories: whether they're shown, and how to toggle that. */
   open?: boolean; toggle?: () => void;
@@ -54,7 +54,7 @@ export function Stats() {
   const pct = (x: number) => (total > 0 ? ((x / total) * 100).toFixed(1) + '%' : '—');
 
   const rows: Row[] = [];
-  const link = (f: { category?: number; payee?: number; kind?: CatType }) => txnsLink({ ...f, from, to });
+  const link = (f: { category?: number | 'none'; payee?: number; kind?: CatType }) => txnsLink({ ...f, from, to });
 
   // An amount and the transactions it came from (a split counts once per row it adds to).
   type Sum = { amount: number; ids: Set<number> };
@@ -95,7 +95,7 @@ export function Stats() {
         }));
       }
     });
-    if (none.amount !== 0) rows.push({ key: 'c0', name: '(no category)', color: OTHER, amount: none.amount, count: none.ids.size, sub: false });
+    if (none.amount !== 0) rows.push({ key: 'c0', name: '(no category)', color: OTHER, amount: none.amount, count: none.ids.size, sub: false, href: link({ category: 'none' }) });
   } else {
     const agg = new Map<number, Sum>();
     for (const f of fl) add(agg, f.payee, f);

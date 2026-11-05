@@ -113,6 +113,11 @@ export function accountGroups(accounts: Account[], bal: Map<number, number>, idx
 export const balColor = (n: number) => (n < 0 ? 'var(--neg)' : 'var(--ink)');
 
 /** Display fields shared by every transaction list. `viewAcc` is the account being viewed, or 0. */
+/** An income or expense with no category (not a transfer or a split), which still needs one. */
+export const needsCategory = (t: Txn, idx: Index) => !t.xfer && !t.splits && !idx.catMap.has(t.cat);
+
+export const NEEDS_CATEGORY = 'This needs a category';
+
 export function describeTxn(t: Txn, amt: number, viewAcc: number, idx: Index) {
   const isX = !!t.xfer;
   let payee: string;
@@ -121,11 +126,12 @@ export function describeTxn(t: Txn, amt: number, viewAcc: number, idx: Index) {
     const to = idx.accMap.get(t.xfer)?.name ?? '?';
     payee = viewAcc ? (amt < 0 ? `To ${viewAcc === t.acc ? to : from}` : `From ${viewAcc === t.acc ? to : from}`) : `${from} → ${to}`;
   } else payee = idx.payMap.get(t.payee)?.name || '—';
-  const category = isX ? 'Transfer' : t.splits ? `Split · ${t.splits.length} categories` : idx.catLabel(t.cat) || '—';
+  const missing = needsCategory(t, idx);
+  const category = isX ? 'Transfer' : t.splits ? `Split · ${t.splits.length} categories` : missing ? NEEDS_CATEGORY : idx.catLabel(t.cat);
   return {
     payee,
     category,
-    catColor: isX || t.splits ? 'var(--ink3)' : 'var(--ink2)',
+    catColor: missing ? 'var(--neg)' : isX || t.splits ? 'var(--ink3)' : 'var(--ink2)',
     amtColor: isX ? 'var(--ink2)' : amt > 0 ? 'var(--inc)' : 'var(--out)',
   };
 }

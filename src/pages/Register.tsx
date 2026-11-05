@@ -8,7 +8,7 @@ import { AccountModal } from '../components/AccountModal';
 import { DataTable } from '../components/data-table';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { amountFor, balColor, describeTxn, sortTxnsAsc } from '../lib/ledger';
+import { amountFor, balColor, describeTxn, needsCategory, sortTxnsAsc } from '../lib/ledger';
 import { fdate, rangeDates } from '../lib/dates';
 import { errorMessage, fmt } from '../lib/format';
 import { ACCOUNT_TYPES, PAYMENTS, type Txn } from '../lib/types';
@@ -21,7 +21,8 @@ export function Register() {
   // Filters live in the URL (/transactions?account=12&category=3), so links and Back work.
   const [params, setParams] = useSearchParams();
   const A = params.has('account') ? Number(params.get('account')) || -1 : 0;
-  const C = Number(params.get('category')) || 0;
+  // category=none: incomes and expenses that still need a category.
+  const C = params.get('category') === 'none' ? -1 : Number(params.get('category')) || 0;
   const P = params.has('payee') ? Number(params.get('payee')) || 0 : -1;
   const K = (['exp', 'inc', 'xfer'] as const).find(k => k === params.get('kind')) ?? '';
   // Exact dates, when a link (a category on Statistics, say) brings its own range.
@@ -52,7 +53,7 @@ export function Register() {
   const view = useMemo(() => {
     if (A && !acct) return null;
     // A category matches itself and its subcategories, on the transaction or any split line.
-    const cats = C ? new Set([C, ...idx.subsOf(C).map(c => c.id)]) : null;
+    const cats = C > 0 ? new Set([C, ...idx.subsOf(C).map(c => c.id)]) : null;
     const kindOf = (t: Txn) => (t.xfer ? 'xfer' : t.amount < 0 ? 'exp' : 'inc');
     const list = data.txns.filter(t => !A || t.acc === A || t.xfer === A).sort(sortTxnsAsc);
     const [from, to] = custom ? [F || '0000', T || '9999'] : rangeDates(range, today);
@@ -67,6 +68,7 @@ export function Register() {
       if (K && kindOf(t) !== K) continue;
       if (P >= 0 && (t.xfer || t.payee !== P)) continue;
       if (cats && !(cats.has(t.cat) || t.splits?.some(s => cats.has(s.cat)))) continue;
+      if (C < 0 && !needsCategory(t, idx)) continue;
       if (needle) {
         const hay = [
           idx.payMap.get(t.payee)?.name, t.memo, t.info, idx.catLabel(t.cat),
@@ -207,8 +209,9 @@ export function Register() {
       <option value="inc">Income</option>
       <option value="xfer">Transfers</option>
     </select>
-    <select className="select" value={C || ''} onChange={e => setParam('category', e.target.value)} aria-label="Category">
+    <select className="select" value={C < 0 ? 'none' : C || ''} onChange={e => setParam('category', e.target.value)} aria-label="Category">
       <option value="">All categories</option>
+      <option value="none">Missing category</option>
       <optgroup label="Expense">{catOpts('exp')}</optgroup>
       <optgroup label="Income">{catOpts('inc')}</optgroup>
     </select>

@@ -89,7 +89,6 @@ function toPayload(d: Draft, idx: Index): TxnPayload | string {
     if (!(a > 0)) return 'Enter an amount greater than zero.';
     amount = sign * a;
     if (isX && (!+d.xfer || d.xfer === d.acc)) return 'Choose two different accounts for a transfer.';
-    if (!isX && d.cat === '0') return 'Choose a category, or split the transaction.';
   }
   let xamt: number | null = null;
   if (isCross(d, idx)) {
@@ -106,7 +105,7 @@ function toPayload(d: Draft, idx: Index): TxnPayload | string {
     payment: d.pay,
     info: d.info.trim(),
     payee_id: isX || d.payee === '0' ? null : +d.payee,
-    category_id: isX || d.split ? null : +d.cat,
+    category_id: isX || d.split || d.cat === '0' ? null : +d.cat,
     memo: d.memo.trim(),
     tags: d.tags.split(',').map(x => x.trim()).filter(Boolean),
     splits: isX ? [] : splits,
@@ -125,7 +124,7 @@ export function TxnModal({ initial, onClose }: { initial: Draft; onClose: () => 
   const isX = d.type === 'xfer';
   const split = !isX && d.split;
   const splitSum = d.splits.reduce((a, l) => a + centsOr0(l.amount), 0);
-  const catOpts = catOptions(idx, d.type === 'xfer' ? null : d.type, '— Choose category —');
+  const catOpts = catOptions(idx, d.type === 'xfer' ? null : d.type, '— No category —');
   // Hidden accounts aren't offered, except one this transaction already uses.
   const accounts = data.accounts.filter(a => !a.hidden || String(a.id) === initial.acc || String(a.id) === initial.xfer);
   const cur = idx.accCur(+d.acc);
