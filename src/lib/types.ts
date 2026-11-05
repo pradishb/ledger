@@ -28,8 +28,8 @@ export interface Category {
 export interface Payee {
   id: number;
   name: string;
-  defCat: number;
-  defPay: string;
+  /** Memo patterns: a transaction saved without a payee gets this one when its memo contains one (whole words, any case). */
+  match: string[];
 }
 
 export interface Split {

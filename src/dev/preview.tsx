@@ -47,7 +47,7 @@ const cats: Category[] = [
   { id: 9, name: 'Vegetables', parent: 1, type: 'exp', color: null },
 ];
 const payees: Payee[] = ['Bhatbhateni', 'Salesberry', 'Himalayan Java', 'Nepal Oil Corp', 'NEA', 'Sandbox', 'Grande Hospital', 'Daraz']
-  .map((name, i) => ({ id: i + 1, name, defCat: 0, defPay: 'None' }));
+  .map((name, i) => ({ id: i + 1, name, match: [name] }));
 
 const txns: Txn[] = [];
 const day = (n: number) => { const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().slice(0, 10); };

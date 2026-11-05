@@ -1,12 +1,12 @@
 import { Link } from 'react-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useLedger } from '../data/context';
 import { api, useLedgerMutation } from '../data/api';
 import { Dot, Header, Seg } from '../components/common';
 import { rangeDates } from '../lib/dates';
 import { txnsLink } from '../lib/links';
 import { errorMessage, fmt } from '../lib/format';
-import { OTHER, PALETTE, PAYMENTS, type CatType } from '../lib/types';
+import { OTHER, PALETTE, type CatType } from '../lib/types';
 
 export function CategoriesPayees() {
   const { data, idx, today, online, toast } = useLedger();
@@ -22,6 +22,7 @@ export function CategoriesPayees() {
   const addPayee = useLedgerMutation(api.addPayee);
   const updPayee = useLedgerMutation(api.updatePayee);
   const delPayee = useLedgerMutation(api.deletePayee);
+  const applyMatch = useLedgerMutation(api.applyPayeeMatch);
 
   const run = <A,>(m: { mutateAsync: (a: A) => Promise<unknown> }, arg: A, ok?: string) =>
     m.mutateAsync(arg).then(() => ok && toast(ok), e => toast(errorMessage(e)));
@@ -45,7 +46,6 @@ export function CategoriesPayees() {
   }
 
   const sg = catType === 'exp' ? -1 : 1;
-  const usedAsDefault = (id: number) => data.payees.some(p => p.defCat === id);
   const tops = idx.tops.filter(c => c.type === catType);
 
   function submitCat() {
@@ -62,10 +62,11 @@ export function CategoriesPayees() {
     run(addPayee, name, `Added “${name}”`).then(() => setNewPayee(''));
   }
 
-  const catOpts = [{ v: '0', l: '— None —' }];
-  for (const c of idx.tops) {
-    catOpts.push({ v: String(c.id), l: c.name });
-    for (const s of idx.subsOf(c.id)) catOpts.push({ v: String(s.id), l: '    ' + s.name });
+  function assignExisting() {
+    if (!confirm('Give every existing transaction without a payee the payee its memo matches? Payees already set are kept.')) return;
+    applyMatch.mutateAsync(undefined).then(
+      n => toast(n ? `Assigned a payee to ${n} transaction${n === 1 ? '' : 's'}` : 'No transactions without a payee match a pattern'),
+      e => toast(errorMessage(e)));
   }
   const pq = payeeQ.trim().toLowerCase();
   const payees = [...data.payees].sort((a, b) => a.name.localeCompare(b.name)).filter(p => !pq || p.name.toLowerCase().includes(pq));
@@ -107,7 +108,7 @@ export function CategoriesPayees() {
                     const subs = idx.subsOf(c.id);
                     const tc = (cnt.get(c.id) ?? 0) + subs.reduce((a, x) => a + (cnt.get(x.id) ?? 0), 0);
                     const tt = sg * ((tot.get(c.id) ?? 0) + subs.reduce((a, x) => a + (tot.get(x.id) ?? 0), 0));
-                    const canDelete = tc === 0 && !subs.length && !usedAsDefault(c.id);
+                    const canDelete = tc === 0 && !subs.length;
                     const color = c.color ?? OTHER;
                     return [
                       <tr className="group" key={c.id}>
@@ -125,7 +126,7 @@ export function CategoriesPayees() {
                             <td className="num hide-m" style={{ color: 'var(--ink2)' }}>{n}</td>
                             <td className="num" style={{ color: sv ? (catType === 'exp' ? 'var(--out)' : 'var(--inc)') : 'var(--ink3)', opacity: 0.8 }}>{fmt(sv, idx.disp)}</td>
                             <td className="num hide-m" style={{ color: 'var(--ink2)' }}>{fmt(Math.round(sv / 12), idx.disp)}</td>
-                            <td className="r">{n === 0 && !usedAsDefault(x.id) && <button className="link danger" disabled={!online} onClick={() => run(delCat, x.id)}>Delete</button>}</td>
+                            <td className="r">{n === 0 && <button className="link danger" disabled={!online} onClick={() => run(delCat, x.id)}>Delete</button>}</td>
                           </tr>
                         );
                       }),
@@ -139,19 +140,20 @@ export function CategoriesPayees() {
             <div className="panel">
               <div className="inline-form">
                 <input className="input" style={{ width: 200 }} placeholder="Filter payees" value={payeeQ} onChange={e => setPayeeQ(e.target.value)} />
-                <span className="muted hide-m" style={{ fontSize: 12 }}>Default category and payment fill in automatically when you pick a payee.</span>
+                <span className="muted hide-m" style={{ fontSize: 12 }}>New transactions get the payee whose memo pattern they contain (whole words, any case). Separate patterns with commas.</span>
                 <div className="spacer hide-m" />
                 <input className="input" style={{ width: 200 }} placeholder="New payee name" value={newPayee}
                   onChange={e => setNewPayee(e.target.value)} onKeyDown={e => e.key === 'Enter' && submitPayee()} />
                 <button className="btn sm" onClick={submitPayee} disabled={!online || addPayee.isPending}>Add</button>
+                <button className="btn sm" onClick={assignExisting} disabled={!online || applyMatch.isPending}
+                  title="Give existing transactions without a payee the one their memo matches">Assign payees</button>
               </div>
               <div className="scroll-x">
                 <table className="tbl tbl-fixed" style={{ minWidth: 640 }}>
                   <thead>
                     <tr>
                       <th>Payee</th>
-                      <th style={{ width: 200 }}>Default category</th>
-                      <th style={{ width: 160 }}>Default payment</th>
+                      <th style={{ width: 320 }}>Matches memo</th>
                       <th className="r" style={{ width: 100 }}>Transactions</th>
                       <th className="r" style={{ width: 120 }}>Last 12 months</th>
                       <th style={{ width: 64 }} />
@@ -165,16 +167,8 @@ export function CategoriesPayees() {
                         <tr key={p.id}>
                           <td className="ell"><Link className="name-link" to={txnsLink({ payee: p.id })}>{p.name}</Link></td>
                           <td>
-                            <select className="select" style={{ width: '100%', height: 26, fontSize: 12 }} value={p.defCat} disabled={!online}
-                              onChange={e => run(updPayee, { id: p.id, defCat: +e.target.value })}>
-                              {catOpts.map(o => <option key={o.v} value={o.v}>{o.l}</option>)}
-                            </select>
-                          </td>
-                          <td>
-                            <select className="select" style={{ width: '100%', height: 26, fontSize: 12 }} value={p.defPay} disabled={!online}
-                              onChange={e => run(updPayee, { id: p.id, defPay: e.target.value })}>
-                              {PAYMENTS.map(x => <option key={x} value={x}>{x}</option>)}
-                            </select>
+                            <MatchInput value={p.match} disabled={!online}
+                              onSave={match => run(updPayee, { id: p.id, match }, `Saved patterns for “${p.name}”`)} />
                           </td>
                           <td className="num" style={{ color: 'var(--ink2)' }}>{used}</td>
                           <td className="num" style={{ color: tt > 0 ? 'var(--inc)' : tt < 0 ? 'var(--out)' : 'var(--ink3)' }}>{fmt(tt, idx.disp)}</td>
@@ -191,5 +185,22 @@ export function CategoriesPayees() {
         </div>
       </div>
     </>
+  );
+}
+
+/** Comma-separated memo patterns, saved on Enter or when the field loses focus; Escape undoes. */
+function MatchInput({ value, disabled, onSave }: { value: string[]; disabled: boolean; onSave: (match: string[]) => void }) {
+  const joined = value.join(', ');
+  const [text, setText] = useState(joined);
+  useEffect(() => setText(joined), [joined]);
+  const save = () => {
+    const match = [...new Set(text.split(',').map(x => x.trim()).filter(Boolean))];
+    if (match.join(', ') !== joined) onSave(match);
+    else setText(joined);
+  };
+  return (
+    <input className="input" style={{ width: '100%', height: 26, fontSize: 12 }} placeholder="e.g. Coffee Ghar" value={text} disabled={disabled}
+      onChange={e => setText(e.target.value)} onBlur={save}
+      onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); if (e.key === 'Escape') setText(joined); }} />
   );
 }

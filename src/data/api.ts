@@ -23,7 +23,7 @@ async function fetchAll<T>(
 
 interface AccountRow { id: number; name: string; type: AccountType; group_name: string; opening_cents: number; sort: number; currency: string; hidden: boolean }
 interface CategoryRow { id: number; name: string; parent_id: number | null; type: CatType; color: string | null }
-interface PayeeRow { id: number; name: string; default_category_id: number | null; default_payment: string }
+interface PayeeRow { id: number; name: string; match: string[] | null }
 interface SplitRow { position: number; category_id: number; memo: string; amount_cents: number }
 interface TxnRow {
   id: number; date: string; account_id: number; transfer_account_id: number | null; amount_cents: number;
@@ -36,7 +36,7 @@ export async function fetchLedger(): Promise<LedgerData> {
   const [accounts, cats, payees, txns] = await Promise.all([
     fetchAll<AccountRow>((a, b) => supabase.from('accounts').select('id,name,type,group_name,opening_cents,sort,currency,hidden').order('sort').order('id').range(a, b)),
     fetchAll<CategoryRow>((a, b) => supabase.from('categories').select('id,name,parent_id,type,color').order('id').range(a, b)),
-    fetchAll<PayeeRow>((a, b) => supabase.from('payees').select('id,name,default_category_id,default_payment').order('id').range(a, b)),
+    fetchAll<PayeeRow>((a, b) => supabase.from('payees').select('id,name,match').order('id').range(a, b)),
     fetchAll<TxnRow>((a, b) =>
       supabase.from('transactions')
         .select('id,date,account_id,transfer_account_id,amount_cents,transfer_amount_cents,payment,info,payee_id,category_id,memo,tags,transaction_splits(position,category_id,memo,amount_cents)')
@@ -47,7 +47,7 @@ export async function fetchLedger(): Promise<LedgerData> {
       id: r.id, name: r.name, type: r.type, group: r.group_name, opening: Number(r.opening_cents), sort: r.sort, currency: r.currency, hidden: !!r.hidden,
     })),
     cats: cats.map((r): Category => ({ id: r.id, name: r.name, parent: r.parent_id ?? 0, type: r.type, color: r.color })),
-    payees: payees.map((r): Payee => ({ id: r.id, name: r.name, defCat: r.default_category_id ?? 0, defPay: r.default_payment })),
+    payees: payees.map((r): Payee => ({ id: r.id, name: r.name, match: r.match ?? [] })),
     txns: txns.map((r): Txn => ({
       id: r.id, date: r.date, acc: r.account_id, xfer: r.transfer_account_id ?? 0, amount: Number(r.amount_cents),
       xamt: r.transfer_amount_cents == null ? null : Number(r.transfer_amount_cents),
@@ -115,11 +115,10 @@ export const api = {
   deleteCategory: async (id: number) => void check(await supabase.from('categories').delete().eq('id', id)),
 
   addPayee: async (name: string) => void check(await supabase.from('payees').insert({ name })),
-  updatePayee: async ({ id, defCat, defPay }: { id: number; defCat?: number; defPay?: string }) =>
-    void check(await supabase.from('payees').update({
-      ...(defCat !== undefined && { default_category_id: defCat || null }),
-      ...(defPay !== undefined && { default_payment: defPay }),
-    }).eq('id', id)),
+  updatePayee: async ({ id, match }: { id: number; match: string[] }) =>
+    void check(await supabase.from('payees').update({ match }).eq('id', id)),
+  /** Give existing transactions without a payee the one their memo matches; returns how many. */
+  applyPayeeMatch: async () => check(await supabase.rpc('apply_payee_match')).data as number,
   deletePayee: async (id: number) => void check(await supabase.from('payees').delete().eq('id', id)),
 
   seedCategories: async () => {

@@ -140,13 +140,7 @@ export function TxnModal({ initial, onClose }: { initial: Draft; onClose: () => 
     splits: d.splits.length > 2 ? d.splits.filter((_, j) => j !== i) : d.splits.map((x, j) => (j === i ? { cat: '0', memo: '', amount: '' } : x)),
   });
 
-  const onPayee = (val: string) => {
-    const p = idx.payMap.get(+val);
-    const patch: Partial<Draft> = { payee: val };
-    if (p?.defCat && d.cat === '0' && !d.split) { patch.cat = String(p.defCat); patch.type = idx.catType(p.defCat); }
-    if (p && d.pay === 'None' && p.defPay) patch.pay = p.defPay;
-    setD(patch);
-  };
+  const onPayee = (val: string) => setD({ payee: val });
 
   async function save(keep: boolean) {
     const p = toPayload(d, idx);

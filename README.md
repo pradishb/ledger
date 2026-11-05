@@ -53,6 +53,13 @@ Install on the phone:
 - **Money** is stored as integer cents. **Transfers** are a single row with `transfer_account_id`.
   **Split** transactions store their lines in `transaction_splits` and are saved atomically by the
   `save_transaction` Postgres function.
+- **Payees from the memo:** each payee has memo patterns (Categories & payees → Payees → *Matches memo*).
+  A transaction saved without a payee, that isn't a transfer, gets the payee whose pattern its memo contains,
+  matching whole words and ignoring case and punctuation; the longest pattern wins. A Postgres trigger does this
+  on insert and when the memo is edited (`0006_payee_match.sql`), so it also covers rows written by other tools
+  such as txn-sync. Existing transactions are only matched when you press *Assign payees* on the Payees tab
+  (`apply_payee_match()`, `0008`); editing patterns alone changes no transactions. A payee set by hand is never
+  replaced, and only the payee is set, never the category or payment.
 - **Security:** every table has row level security tied to `auth.uid()`.
 - **Currencies:** every account has a currency, and its amounts and balance are stored and shown in it.
   Net worth, group totals and reports are converted to the *display currency* (picked on Overview and
