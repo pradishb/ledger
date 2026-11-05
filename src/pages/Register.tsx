@@ -3,13 +3,13 @@ import type { ColumnDef, RowSelectionState } from '@tanstack/react-table';
 import { useSearchParams } from 'react-router';
 import { useLedger } from '../data/context';
 import { api, useLedgerMutation } from '../data/api';
-import { Header } from '../components/common';
+import { Header, RangePicker, useRange } from '../components/common';
 import { AccountModal } from '../components/AccountModal';
 import { DataTable } from '../components/data-table';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { amountFor, balColor, describeTxn, sortTxnsAsc } from '../lib/ledger';
-import { fdate, rangeLabel, REG_RANGES, regFrom, type RegRange } from '../lib/dates';
+import { fdate, rangeDates } from '../lib/dates';
 import { errorMessage, fmt } from '../lib/format';
 import { ACCOUNT_TYPES, PAYMENTS, type Txn } from '../lib/types';
 
@@ -34,7 +34,7 @@ export function Register() {
   }, { replace: true });
   const { data, idx, bal, today, openEdit, isMobile, online, toast } = useLedger();
   const [q, setQ] = useState('');
-  const [range, setRange] = useState<RegRange>('3m');
+  const [range, setRange] = useRange('register', 'l90');
   const [editing, setEditing] = useState(false);
   const [selection, setSelection] = useState<RowSelectionState>({});
   const upd = useLedgerMutation(api.updateTxns);
@@ -55,8 +55,7 @@ export function Register() {
     const cats = C ? new Set([C, ...idx.subsOf(C).map(c => c.id)]) : null;
     const kindOf = (t: Txn) => (t.xfer ? 'xfer' : t.amount < 0 ? 'exp' : 'inc');
     const list = data.txns.filter(t => !A || t.acc === A || t.xfer === A).sort(sortTxnsAsc);
-    const from = custom ? F || '0000' : regFrom(range, today);
-    const to = T || '9999';
+    const [from, to] = custom ? [F || '0000', T || '9999'] : rangeDates(range, today);
     let run = acct?.opening ?? 0;
     let tin = 0, tout = 0;
     const rows: { t: Txn; amt: number; run: number }[] = [];
@@ -191,16 +190,12 @@ export function Register() {
   ]);
 
   const filters = <>
-    <Input type="search" className="h-8 w-60" value={q} onChange={e => setQ(e.target.value)} placeholder="Search payee, memo, category, amount" aria-label="Search" />
-    <select className="select" value={custom ? 'custom' : range} aria-label="Date range"
-      onChange={e => {
-        if (e.target.value === 'custom') return;
-        setRange(e.target.value as RegRange);
+    <Input type="search" className="h-7 w-60 max-[761px]:h-9" value={q} onChange={e => setQ(e.target.value)} placeholder="Search payee, memo, category, amount" aria-label="Search" />
+    <RangePicker compact value={range} custom={custom ? [F || '0000', T || '9999'] : undefined}
+      onChange={r => {
+        setRange(r);
         setParams(prev => { const n = new URLSearchParams(prev); n.delete('from'); n.delete('to'); return n; }, { replace: true });
-      }}>
-      {custom && <option value="custom">{rangeLabel(F || '0000', T || '9999', today)}</option>}
-      {REG_RANGES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
-    </select>
+      }} />
     <select className="select" value={A > 0 ? A : ''} onChange={e => setParam('account', e.target.value)} aria-label="Account">
       <option value="">All accounts</option>
       {shownAccounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}

@@ -135,21 +135,6 @@ export function rangeDates(k: Range, today: string): [string, string] {
   }
 }
 
-export const REG_RANGES = [
-  ['30d', 'Last 30 days'], ['3m', 'Last 3 months'], ['ytd', 'This year'], ['all', 'All dates'],
-] as const;
-export type RegRange = (typeof REG_RANGES)[number][0];
-
-export function regFrom(k: RegRange, today: string) {
-  const [y, m] = parts(today);
-  switch (k) {
-    case '30d': return addDays(today, -30);
-    case '3m': return monthOf(...addMonths(y, m, -3)).from;
-    case 'ytd': return ymd(y, 1, 1);
-    case 'all': return '';
-  }
-}
-
 export function rangeLabel(from: string, to: string, today: string) {
   if (from === '0000' && to === '9999') return 'Every date';
   if (from === '0000') return `Through ${fdate(to, today)}`;

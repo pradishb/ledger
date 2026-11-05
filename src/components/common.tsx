@@ -140,16 +140,19 @@ export function useRange(key: string, initial: Range) {
 }
 
 /** Button that opens a grid of date ranges, with the chosen range's dates beside it. */
-export function RangePicker({ value, onChange, compact = false, alignRight = false }: {
+export function RangePicker({ value, onChange, compact = false, alignRight = false, custom }: {
   value: Range; onChange: (r: Range) => void;
   /** For panel headers: a smaller button, with the dates as its tooltip instead of beside it. */
   compact?: boolean;
   /** Open the list leftwards, for pickers near the right edge. */
   alignRight?: boolean;
+  /** Exact dates that override `value` (from a link); the button shows them and no choice is ticked. */
+  custom?: [string, string];
 }) {
   const { today } = useLedger();
   const [open, setOpen] = useState(false);
-  const [from, to] = rangeDates(value, today);
+  const [from, to] = custom ?? rangeDates(value, today);
+  const sel = custom ? undefined : value;
 
   // Radix Popover handles outside clicks, Esc, focus and keeping the list on screen.
   return (
@@ -158,7 +161,7 @@ export function RangePicker({ value, onChange, compact = false, alignRight = fal
         <PopoverTrigger asChild>
           <button type="button" className="select range-btn" aria-haspopup="listbox"
             title={compact ? rangeLabel(from, to, today) : undefined}>
-            {rangeName(value)}
+            {custom ? rangeLabel(from, to, today) : rangeName(value)}
           </button>
         </PopoverTrigger>
         <PopoverContent align={alignRight ? 'end' : 'start'} sideOffset={4}
@@ -166,9 +169,9 @@ export function RangePicker({ value, onChange, compact = false, alignRight = fal
           {RANGE_ROWS.map((row, i) => row === 'divider'
             ? <div key={i} className="col-span-3 mx-0.5 my-1 h-px bg-border" />
             : row.map(([k, label]) => (
-              <button type="button" key={k} role="option" aria-selected={k === value}
+              <button type="button" key={k} role="option" aria-selected={k === sel}
                 className={cn('truncate rounded-[5px] px-2 py-[7px] text-left text-[12.5px] hover:bg-accent',
-                  k === value && 'bg-primary text-primary-foreground hover:bg-primary')}
+                  k === sel && 'bg-primary text-primary-foreground hover:bg-primary')}
                 onClick={() => { onChange(k); setOpen(false); }}>
                 {label}
               </button>
