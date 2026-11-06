@@ -71,7 +71,10 @@ export function Overview() {
     const b = bal.get(a.id) ?? 0;
     return (
       <tr className="clickable" key={a.id} onClick={() => navigate(`/transactions?account=${a.id}`)}>
-        <td style={{ paddingLeft: 28 }}>{a.name}</td>
+        <td style={{ paddingLeft: 28 }}>
+          {a.name}
+          {a.tags.map(t => <span className="tag" key={t}>{t}</span>)}
+        </td>
         <td className="num" style={{ color: balColor(b) }}>{fmt(b, idx.accCur(a.id))}</td>
         <td />
       </tr>

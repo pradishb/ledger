@@ -15,8 +15,8 @@ export interface Account {
   currency: string;
   /** Left out of the Overview and new-transaction pickers; still counted in totals. */
   hidden: boolean;
-  /** Hand-written note on how it grows, shown as a badge ("5% p.a.", a gold rate); empty for none. */
-  growth: string;
+  /** Free-form labels shown beside the name ("5% p.a.", "joint"). */
+  tags: string[];
 }
 
 export interface Category {

@@ -8,7 +8,6 @@ import { Header, Seg, useUrlText } from '../components/common';
 import { AccountModal } from '../components/AccountModal';
 import { DataTable } from '../components/data-table';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { TableCell, TableRow } from '@/components/ui/table';
 import { balColor, sumBy } from '../lib/ledger';
@@ -52,7 +51,7 @@ export function Accounts() {
     .filter(a => prefs.show === 'all' || (prefs.show === 'hidden') === a.hidden)
     .filter(a => !prefs.type || a.type === prefs.type)
     .filter(a => !prefs.cur || a.currency === prefs.cur)
-    .filter(a => !needle || a.name.toLowerCase().includes(needle) || a.group.toLowerCase().includes(needle));
+    .filter(a => !needle || a.name.toLowerCase().includes(needle) || a.group.toLowerCase().includes(needle) || a.tags.some(t => t.toLowerCase().includes(needle)));
 
   // Only rows still on screen count as selected, so a filter never edits accounts you can't see.
   const sel = rows.filter(a => selection[a.id]);
@@ -89,7 +88,7 @@ export function Accounts() {
       id: 'name', header: 'Account', accessorFn: a => a.name, meta: { flex: true }, sortingFn: (x, y) => text(x.original.name, y.original.name),
       cell: ({ row: { original: a } }) => <>
         {a.name}
-        {a.growth && <Badge variant="secondary" className="ml-2 align-[1px] text-[10.5px]" title="Growth">{a.growth}</Badge>}
+        {a.tags.map(t => <span className="tag" key={t}>{t}</span>)}
         {a.hidden && <span className="tag">Hidden</span>}
       </>,
     },
