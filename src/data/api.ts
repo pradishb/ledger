@@ -141,6 +141,7 @@ export function useLedgerMutation<A, R>(fn: (arg: A) => Promise<R>) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: fn,
-    onSuccess: () => qc.invalidateQueries({ queryKey: LEDGER_KEY }),
+    // Refresh in the background: a save is done once the write lands, not after the whole ledger reloads.
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: LEDGER_KEY }); },
   });
 }
