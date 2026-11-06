@@ -7,6 +7,7 @@ import { Stats } from './pages/Stats';
 import { Trend } from './pages/Trend';
 import { CategoriesPayees } from './pages/CategoriesPayees';
 import { More } from './pages/More';
+import { Import } from './pages/Import';
 
 /** Old /accounts/:id links now open the Transactions page filtered to that account. */
 function AccountRedirect() {
@@ -26,6 +27,7 @@ export function AppRoutes({ onSignOut, email }: { onSignOut: () => void; email: 
         <Route path="stats" element={<Stats />} />
         <Route path="trend" element={<Trend />} />
         <Route path="categories" element={<CategoriesPayees />} />
+        <Route path="import" element={<Import />} />
         <Route path="more" element={<More />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>

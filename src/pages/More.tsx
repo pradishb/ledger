@@ -13,6 +13,7 @@ export function More() {
           <div className="panel more-list">
             <Link to="/trend">Trend over time</Link>
             <Link to="/categories">Categories & payees</Link>
+            <Link to="/import">Import</Link>
           </div>
           <div className="panel" style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 12 }}>
             <span className="muted">Appearance</span>

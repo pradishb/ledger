@@ -137,7 +137,7 @@ export function Layout({ onSignOut, email }: { onSignOut: () => void; email: str
 
 const NAV: [string, string][] = [
   ['/', 'Overview'], ['/accounts', 'Accounts'], ['/transactions', 'Transactions'],
-  ['/stats', 'Statistics'], ['/trend', 'Trend over time'], ['/categories', 'Categories & payees'],
+  ['/stats', 'Statistics'], ['/trend', 'Trend over time'], ['/categories', 'Categories & payees'], ['/import', 'Import'],
 ];
 
 const TABS: [string, string, string][] = [
