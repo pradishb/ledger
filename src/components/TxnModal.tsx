@@ -166,16 +166,16 @@ export function TxnModal({ initial, onClose }: { initial: Draft; onClose: () => 
   }
 
   return (
-    <SheetDialog title={d.id ? 'Edit transaction' : 'New transaction'} onClose={onClose}
+    <SheetDialog title={d.id ? 'Edit transaction' : 'New transaction'} onClose={onClose} onSubmit={() => { if (!busy && online) save(false); }}
       head={<Seg className="md" value={d.type}
         options={[['exp', 'Expense'], ['inc', 'Income'], ['xfer', 'Transfer']] as const}
         onChange={k => setD({ type: k, cat: '0', xfer: d.xfer === d.acc ? otherAccount(accounts, d.acc) : d.xfer })} />}
       foot={<>
-        {d.id > 0 && <button className="btn danger" onClick={del} disabled={busy || !online}>Delete</button>}
+        {d.id > 0 && <button type="button" className="btn danger" onClick={del} disabled={busy || !online}>Delete</button>}
         <div className="spacer" />
-        <button className="btn" onClick={onClose}>Cancel</button>
-        {!d.id && <button className="btn" onClick={() => save(true)} disabled={busy || !online}>Save and add another</button>}
-        <button className="btn-primary" onClick={() => save(false)} disabled={busy || !online}>Save</button>
+        <button type="button" className="btn" onClick={onClose}>Cancel</button>
+        {!d.id && <button type="button" className="btn" onClick={() => save(true)} disabled={busy || !online}>Save and add another</button>}
+        <button className="btn-primary" disabled={busy || !online}>Save</button>
       </>}>
           <div className="form-grid">
             <label className="field">Date
