@@ -58,7 +58,15 @@ const MIN_GW = 26;
 /** Room for a horizontal scrollbar under a scrolling chart. */
 const SCROLLBAR = 12;
 
-export function ChartIE({ months, w, h }: { months: IEMonth[]; w: number; h: number }) {
+/** Bars that open something when clicked get a pointer and a hint in their tooltip. */
+const clickable = (on: unknown) => (on ? { cursor: 'pointer' } : {});
+const HINT = ' · click to see these transactions';
+
+export function ChartIE({ months, w, h, onBar }: {
+  months: IEMonth[]; w: number; h: number;
+  /** Called with the period's index when its income or expense bar is clicked. */
+  onBar?: (i: number, kind: 'inc' | 'exp') => void;
+}) {
   const cur = useLedger().idx.disp;
   const scrollRef = useRef<HTMLDivElement>(null);
   const fitW = w - P.l - P.r;
@@ -89,8 +97,10 @@ export function ChartIE({ months, w, h }: { months: IEMonth[]; w: number; h: num
   months.forEach((m, i) => {
     const cx = i * gw + gw / 2;
     const hi = Math.max(0, (m.inc / max) * ih), he = Math.max(0, (m.exp / max) * ih);
-    els.push(<rect key={`i${i}`} x={cx - bw - 1} y={P.t + ih - hi} width={bw} height={hi} rx={2} style={{ fill: 'var(--acc)' }}><title>{`${m.full}: income ${fmt(m.inc, cur)}`}</title></rect>);
-    els.push(<rect key={`e${i}`} x={cx + 1} y={P.t + ih - he} width={bw} height={he} rx={2} style={{ fill: 'var(--exp)' }}><title>{`${m.full}: expenses ${fmt(m.exp, cur)}`}</title></rect>);
+    els.push(<rect key={`i${i}`} x={cx - bw - 1} y={P.t + ih - hi} width={bw} height={hi} rx={2} style={{ fill: 'var(--acc)', ...clickable(onBar) }}
+      onClick={onBar && (() => onBar(i, 'inc'))}><title>{`${m.full}: income ${fmt(m.inc, cur)}${onBar ? HINT : ''}`}</title></rect>);
+    els.push(<rect key={`e${i}`} x={cx + 1} y={P.t + ih - he} width={bw} height={he} rx={2} style={{ fill: 'var(--exp)', ...clickable(onBar) }}
+      onClick={onBar && (() => onBar(i, 'exp'))}><title>{`${m.full}: expenses ${fmt(m.exp, cur)}${onBar ? HINT : ''}`}</title></rect>);
     // Count labels from the latest bar, so the newest period is always labelled.
     if ((n - 1 - i) % every === 0) els.push(<text key={`l${i}`} x={cx} y={ch - 6} textAnchor="middle" style={LBL}>{m.label}</text>);
   });
@@ -106,7 +116,11 @@ export function ChartIE({ months, w, h }: { months: IEMonth[]; w: number; h: num
 
 export interface Series { id: number; name: string; color: string; values: number[] }
 
-export function ChartStack({ months, series, w, h }: { months: Month[]; series: Series[]; w: number; h: number }) {
+export function ChartStack({ months, series, w, h, onBar }: {
+  months: Month[]; series: Series[]; w: number; h: number;
+  /** Called with the period's index and the series' id when a segment is clicked. */
+  onBar?: (i: number, id: number) => void;
+}) {
   const cur = useLedger().idx.disp;
   const iw = w - P.l - P.r, ih = h - P.t - P.b;
   const totals = months.map((_, i) => series.reduce((a, s) => a + Math.max(0, s.values[i]), 0));
@@ -124,7 +138,8 @@ export function ChartStack({ months, series, w, h }: { months: Month[]; series: 
       const hh = (v / max) * ih;
       if (hh <= 0) return;
       y0 -= hh;
-      els.push(<rect key={`s${i}-${j}`} x={cx - bw / 2} y={y0} width={bw} height={Math.max(0, hh - 1)} style={{ fill: s.color }}><title>{`${m.full} · ${s.name}: ${fmt(v, cur)}`}</title></rect>);
+      els.push(<rect key={`s${i}-${j}`} x={cx - bw / 2} y={y0} width={bw} height={Math.max(0, hh - 1)} style={{ fill: s.color, ...clickable(onBar) }}
+        onClick={onBar && (() => onBar(i, s.id))}><title>{`${m.full} · ${s.name}: ${fmt(v, cur)}${onBar ? HINT : ''}`}</title></rect>);
     });
     if ((months.length - 1 - i) % every === 0) els.push(<text key={`l${i}`} x={cx} y={h - 6} textAnchor="middle" style={LBL}>{m.label}</text>);
   });

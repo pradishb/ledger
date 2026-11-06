@@ -1,4 +1,5 @@
 import { useState, type MouseEvent, type ReactNode } from 'react';
+import { useNavigate } from 'react-router';
 import { useLedger } from '../data/context';
 import { Dot, Header, Panel, RangePicker, Seg, useRange, useUrlChoice, useUrlIds } from '../components/common';
 import { ChartBars, ChartIE, ChartLine, ChartStack, Sized, SizedBox, type Series } from '../components/Charts';
@@ -6,12 +7,14 @@ import { balColor, flows, sumType } from '../lib/ledger';
 import { addDays, buckets, rangeDates, rangeLabel, unitFits, UNIT_NAME, type Unit } from '../lib/dates';
 import { fmt0 } from '../lib/format';
 import { OTHER } from '../lib/types';
+import { txnsLink } from '../lib/links';
 
 interface Cell { v: string; color: string }
 interface Row { name: string; color: string; cells: Cell[]; total: string; avg: string; totColor: string; weight: number; op: number; onClick?: (e: MouseEvent) => void }
 
 export function Trend() {
   const { data, idx, today } = useLedger();
+  const navigate = useNavigate();
   const [mode, setMode] = useUrlChoice('mode', ['ie', 'cat', 'nw'] as const, 'ie');
   const [range, setRange] = useRange('trend', 'l12m');
   const [unit, setUnit] = useTrendUnit();
@@ -44,7 +47,8 @@ export function Trend() {
   if (mode === 'ie') {
     const inc = mfl.map(f => sumType(f, 'inc', idx)), exp = mfl.map(f => sumType(f, 'exp', idx));
     const net = inc.map((x, i) => x - exp[i]);
-    chart = w => <ChartIE months={months.map((m, i) => ({ ...m, inc: inc[i], exp: exp[i] }))} w={w} h={220} />;
+    chart = w => <ChartIE months={months.map((m, i) => ({ ...m, inc: inc[i], exp: exp[i] }))} w={w} h={220}
+      onBar={(i, kind) => navigate(txnsLink({ kind, from: months[i].from, to: months[i].to }))} />;
     legend = [{ key: 'i', name: 'Income', color: 'var(--acc)', op: 1 }, { key: 'e', name: 'Expenses', color: 'var(--exp)', op: 1 }];
     const rate = T(inc) ? Math.round((T(net) / T(inc)) * 100) : null;
     savedPanel = (
@@ -155,7 +159,8 @@ export function Trend() {
       const alone = shown.length === 1 && shown[0].id === id;
       setHidden(alone ? {} : Object.fromEntries(series.filter(x => x.id !== id).map(x => [x.id, true])));
     };
-    chart = w => <ChartStack months={months} series={shown} w={w} h={220} />;
+    chart = w => <ChartStack months={months} series={shown} w={w} h={220}
+      onBar={(i, id) => navigate(txnsLink({ category: id, from: months[i].from, to: months[i].to }))} />;
     legend = series.map(x => ({ key: String(x.id), name: x.name, color: x.color, op: hidden[x.id] ? 0.4 : 1, onClick: pick(x.id) }));
     if (shown.length < series.length) legend.unshift({ key: 'all', name: 'Show all', color: 'transparent', op: 1, onClick: () => setHidden({}) });
     rows = series.map(x => ({

@@ -196,7 +196,8 @@ export function Overview() {
                 <span><Dot color="var(--acc)" />Income</span>
                 <span><Dot color="var(--exp)" />Expenses</span>
               </div>
-              <SizedBox style={{ padding: '10px 10px 6px', minHeight: 260 }}>{(w, h) => <ChartIE months={months} w={w} h={h} />}</SizedBox>
+              <SizedBox style={{ padding: '10px 10px 6px', minHeight: 260 }}>{(w, h) => <ChartIE months={months} w={w} h={h}
+                onBar={(i, kind) => navigate(txnsLink({ kind, from: months[i].from, to: months[i].to }))} />}</SizedBox>
             </Panel>
           </div>
         </div>
