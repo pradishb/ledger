@@ -21,7 +21,7 @@ async function fetchAll<T>(
   }
 }
 
-interface AccountRow { id: number; name: string; type: AccountType; group_name: string; opening_cents: number; sort: number; currency: string; hidden: boolean; tags: string[] | null }
+interface AccountRow { id: number; name: string; type: AccountType; group_name: string; opening_cents: number; sort: number; currency: string; hidden: boolean; tags: string[] | null; rate: number | string | null }
 interface CategoryRow { id: number; name: string; parent_id: number | null; type: CatType; color: string | null }
 interface PayeeRow { id: number; name: string; match: string[] | null }
 interface SplitRow { position: number; category_id: number; memo: string; amount_cents: number }
@@ -34,7 +34,7 @@ interface TxnRow {
 
 export async function fetchLedger(): Promise<LedgerData> {
   const [accounts, cats, payees, txns] = await Promise.all([
-    fetchAll<AccountRow>((a, b) => supabase.from('accounts').select('id,name,type,group_name,opening_cents,sort,currency,hidden,tags').order('sort').order('id').range(a, b)),
+    fetchAll<AccountRow>((a, b) => supabase.from('accounts').select('id,name,type,group_name,opening_cents,sort,currency,hidden,tags,rate').order('sort').order('id').range(a, b)),
     fetchAll<CategoryRow>((a, b) => supabase.from('categories').select('id,name,parent_id,type,color').order('id').range(a, b)),
     fetchAll<PayeeRow>((a, b) => supabase.from('payees').select('id,name,match').order('id').range(a, b)),
     fetchAll<TxnRow>((a, b) =>
@@ -44,7 +44,7 @@ export async function fetchLedger(): Promise<LedgerData> {
   ]);
   return {
     accounts: accounts.map((r): Account => ({
-      id: r.id, name: r.name, type: r.type, group: r.group_name, opening: Number(r.opening_cents), sort: r.sort, currency: r.currency, hidden: !!r.hidden, tags: r.tags ?? [],
+      id: r.id, name: r.name, type: r.type, group: r.group_name, opening: Number(r.opening_cents), sort: r.sort, currency: r.currency, hidden: !!r.hidden, tags: r.tags ?? [], rate: r.rate == null ? null : Number(r.rate),
     })),
     cats: cats.map((r): Category => ({ id: r.id, name: r.name, parent: r.parent_id ?? 0, type: r.type, color: r.color })),
     payees: payees.map((r): Payee => ({ id: r.id, name: r.name, match: r.match ?? [] })),
@@ -117,13 +117,13 @@ export const api = {
 
   addAccount: async (a: Omit<Account, 'id' | 'sort' | 'hidden'>) =>
     void check(await supabase.from('accounts').insert({
-      name: a.name, type: a.type, group_name: a.group, opening_cents: a.opening, currency: a.currency, tags: a.tags,
+      name: a.name, type: a.type, group_name: a.group, opening_cents: a.opening, currency: a.currency, tags: a.tags, rate: a.rate,
     })),
   setAccountHidden: async ({ id, hidden }: { id: number; hidden: boolean }) =>
     void check(await supabase.from('accounts').update({ hidden }).eq('id', id)),
-  updateAccount: async (a: { id: number; name: string; type: AccountType; group: string; opening: number; hidden: boolean; tags: string[] }) =>
+  updateAccount: async (a: { id: number; name: string; type: AccountType; group: string; opening: number; hidden: boolean; tags: string[]; rate: number | null }) =>
     void check(await supabase.from('accounts').update({
-      name: a.name, type: a.type, group_name: a.group, opening_cents: a.opening, hidden: a.hidden, tags: a.tags,
+      name: a.name, type: a.type, group_name: a.group, opening_cents: a.opening, hidden: a.hidden, tags: a.tags, rate: a.rate,
     }).eq('id', a.id)),
   /** One change applied to several accounts at once. Currency is deliberately not editable. */
   updateAccounts: async ({ ids, patch }: { ids: number[]; patch: { hidden?: boolean; type?: AccountType; group?: string } }) => {

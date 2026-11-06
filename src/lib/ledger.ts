@@ -110,6 +110,14 @@ export function accountGroups(accounts: Account[], bal: Map<number, number>, idx
   return names.map(n => make(`group:${n}`, n || 'No group', accounts.filter(a => a.group === n)));
 }
 
+/** What an account should earn in a year at its rate, in its own currency (balance × rate); null without a rate. */
+export const expectedYear = (a: Account, bal: Map<number, number>) =>
+  a.rate == null ? null : Math.round(((bal.get(a.id) ?? 0) * a.rate) / 100);
+
+/** Expected yearly income over accounts, in the display currency (accounts with no exchange rate left out). */
+export const expectedTotal = (accounts: Account[], bal: Map<number, number>, idx: Index) =>
+  sumBy(accounts, a => idx.toDisp(a.id, expectedYear(a, bal) ?? 0));
+
 export const balColor = (n: number) => (n < 0 ? 'var(--neg)' : 'var(--ink)');
 
 /** Display fields shared by every transaction list. `viewAcc` is the account being viewed, or 0. */

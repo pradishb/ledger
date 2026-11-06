@@ -157,7 +157,7 @@ input.input[type='date']::-webkit-date-and-time-value { text-align: left; margin
   .nw-split { flex: 1; min-height: 380px; grid-template-rows: minmax(0, 1fr); }
   .dash3 { flex: 1; min-height: 380px; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: stretch; }
 }
-.kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.kpis { display: grid; grid-template-columns: repeat(var(--kpis, 4), minmax(0, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
 .kpi { padding: 12px 16px; background: var(--panel); min-width: 0; }
 .kpi .l { font-size: 11.5px; color: var(--ink3); }
 .kpi .v { font-family: var(--mono); font-size: 20px; font-weight: 500; letter-spacing: -0.02em; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -224,6 +224,8 @@ input.input[type='date']::-webkit-date-and-time-value { text-align: left; margin
   .toolbar .input { flex: 1 1 100%; width: auto !important; }
 
   .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  /* An odd last card takes the whole row on phones. */
+  .kpi:last-child:nth-child(odd) { grid-column: 1 / -1; }
   .kpi { padding: 10px 12px; }
   .kpi .v { font-size: 17px; }
   .spend-row { grid-template-columns: 96px minmax(0, 1fr) 76px 36px; gap: 8px; }

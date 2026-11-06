@@ -4,7 +4,7 @@ import { useLedger } from '../data/context';
 import { api, useLedgerMutation } from '../data/api';
 import { Bar, Chevron, Dot, Header, Panel, RangePicker, Seg, useOpenGroups, useRange } from '../components/common';
 import { ChartIE, SizedBox } from '../components/Charts';
-import { accountGroups, balColor, flows, sumType, type GroupBy } from '../lib/ledger';
+import { accountGroups, balColor, expectedTotal, flows, sumType, type GroupBy } from '../lib/ledger';
 import { autoUnit, buckets, longDate, rangeDates, rangeName, unitFits, UNIT_NAME, UNITS, type Unit } from '../lib/dates';
 import { errorMessage, fmt, fmt0 } from '../lib/format';
 import { rankColor } from '../lib/types';
@@ -24,6 +24,10 @@ export function Overview() {
   const inc = sumType(fl30, 'inc', idx), exp = sumType(fl30, 'exp', idx);
   const assets = data.accounts.reduce((a, x) => a + Math.max(0, idx.toDisp(x.id, bal.get(x.id) ?? 0)), 0);
 
+  // Balance × rate over every account with a rate: interest paid, and value gained by gold or property.
+  const expected = expectedTotal(data.accounts, bal, idx);
+  const rated = data.accounts.filter(a => a.rate != null).length;
+
   const kpis = [
     { label: 'Net worth', value: fmt(netWorth, idx.disp), sub: idx.unrated.length
       ? `${idx.unrated.join(', ')} left out: no exchange rate`
@@ -31,6 +35,8 @@ export function Overview() {
     { label: `Income · ${rl}`, value: fmt(inc, idx.disp), sub: 'Transfers excluded', color: 'var(--inc)' },
     { label: `Spending · ${rl}`, value: fmt(exp, idx.disp), sub: `${fl30.filter(f => idx.catType(f.cat) === 'exp').length} entries`, color: 'var(--out)' },
     { label: `Saved · ${rl}`, value: fmt(inc - exp, idx.disp), sub: inc ? `${Math.round(((inc - exp) / inc) * 100)}% of income` : '—', color: balColor(inc - exp) },
+    ...(rated ? [{ label: 'Expected per year', value: fmt(expected, idx.disp),
+      sub: `${fmt0(Math.round(expected / 12), idx.disp)} a month · ${rated} account${rated === 1 ? '' : 's'} with a rate`, color: balColor(expected) }] : []),
   ];
 
   // Each panel has its own range; new ones start from the cards' range.
@@ -121,7 +127,7 @@ export function Overview() {
 
           <div className="toolbar"><RangePicker compact value={range} onChange={setRange} /></div>
 
-          <div className="kpis">
+          <div className="kpis" style={{ '--kpis': kpis.length } as CSSProperties}>
             {kpis.map(k => (
               <div className="kpi" key={k.label}>
                 <div className="l">{k.label}</div>

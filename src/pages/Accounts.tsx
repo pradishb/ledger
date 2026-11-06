@@ -10,7 +10,7 @@ import { DataTable } from '../components/data-table';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { TableCell, TableRow } from '@/components/ui/table';
-import { balColor, sumBy } from '../lib/ledger';
+import { balColor, expectedTotal, expectedYear, sumBy } from '../lib/ledger';
 import { errorMessage, fmt } from '../lib/format';
 import { ACCOUNT_TYPES, type Account, type AccountType } from '../lib/types';
 
@@ -80,6 +80,7 @@ export function Accounts() {
 
   const shownTotal = sumBy(rows, a => idx.toDisp(a.id, bal.get(a.id) ?? 0));
   const netWorth = sumBy(data.accounts, a => idx.toDisp(a.id, bal.get(a.id) ?? 0));
+  const expected = expectedTotal(data.accounts, bal, idx);
   const filtered = rows.length !== data.accounts.length;
   const anyFilter = !!(needle || prefs.type || prefs.cur || prefs.show !== 'visible');
 
@@ -117,6 +118,22 @@ export function Accounts() {
       },
     },
     {
+      id: 'rate', header: 'Rate', size: 80, sortUndefined: 'last', accessorFn: a => a.rate ?? undefined,
+      meta: { align: 'right', hideOnMobile: true, cellClass: 'num text-muted-foreground' },
+      cell: ({ row: { original: a } }) => (a.rate == null ? '' : `${a.rate}%`),
+    },
+    {
+      // Balance × rate: what it should earn (or gain in value) in a year.
+      id: 'yield', header: 'Expected / yr', size: 150, sortDescFirst: true, sortUndefined: 'last',
+      accessorFn: a => { const y = expectedYear(a, bal); return y == null ? undefined : idx.convert(y, a.currency, idx.disp) ?? undefined; },
+      meta: { align: 'right', hideOnMobile: true, label: 'Expected per year', cellClass: 'num', cellStyle: a => ({ color: balColor(expectedYear(a, bal) ?? 0) }) },
+      cell: ({ row: { original: a } }) => {
+        const y = expectedYear(a, bal);
+        if (y == null) return '';
+        return <span title={`${fmt(Math.round(y / 12), a.currency)} a month`}>{fmt(y, a.currency)}</span>;
+      },
+    },
+    {
       id: 'actions', header: '', size: 76, enableSorting: false, enableResizing: false, enableHiding: false, meta: { align: 'right' },
       cell: ({ row: { original: a } }) => (
         <div className="flex justify-end gap-0.5" onClick={e => e.stopPropagation()}>
@@ -132,9 +149,9 @@ export function Accounts() {
     },
   ];
 
-  // Totals sit under Balance (wherever it's been moved); the label fills the columns on one side.
-  const footRow = (cols: Column<Account, unknown>[], label: ReactNode, value: ReactNode, color: string) => {
-    const at = cols.findIndex(c => c.id === 'bal');
+  // Totals sit under their column (Balance, or Expected), wherever it's been moved; the label fills the columns on one side.
+  const footRow = (cols: Column<Account, unknown>[], label: ReactNode, value: ReactNode, color: string, under = 'bal') => {
+    const at = cols.findIndex(c => c.id === under);
     const before = cols.slice(0, Math.max(0, at)), after = cols.slice(at + 1);
     return (
       <TableRow>
@@ -199,6 +216,9 @@ export function Accounts() {
                 <>Net worth <span className="text-xs font-normal text-muted-foreground">· all accounts</span></>,
                 <>{fmt(netWorth, idx.disp)}{idx.unrated.length > 0 && <div className="text-xs text-muted-foreground">{idx.unrated.join(', ')} not included: no rate</div>}</>,
                 balColor(netWorth))}
+              {expected !== 0 && footRow(cols,
+                <>Expected per year <span className="text-xs font-normal text-muted-foreground">· balance × rate, {fmt(Math.round(expected / 12), idx.disp)} a month</span></>,
+                fmt(expected, idx.disp), balColor(expected), 'yield')}
             </> : undefined} />
           {editing && <AccountModal account={editing === 'new' ? undefined : editing} onClose={() => setEditing(null)} />}
         </div>
@@ -208,7 +228,7 @@ export function Accounts() {
 }
 
 const PREFS_KEY = 'ledger.accountsView';
-const SORTABLE = ['name', 'type', 'group', 'cur', 'bal'];
+const SORTABLE = ['name', 'type', 'group', 'cur', 'bal', 'rate', 'yield'];
 
 /** Sort and filters for the accounts table, remembered per device (the search box isn't). */
 function usePrefs() {

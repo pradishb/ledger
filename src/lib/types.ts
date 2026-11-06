@@ -15,8 +15,10 @@ export interface Account {
   currency: string;
   /** Left out of the Overview and new-transaction pickers; still counted in totals. */
   hidden: boolean;
-  /** Free-form labels shown beside the name ("5% p.a.", "joint"). */
+  /** Free-form labels shown beside the name ("joint", "emergency fund"). */
   tags: string[];
+  /** Annual rate in percent (interest paid, or how fast its value grows); null for none. */
+  rate: number | null;
 }
 
 export interface Category {

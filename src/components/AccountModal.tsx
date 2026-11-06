@@ -23,6 +23,7 @@ export function AccountModal({ account, onClose }: { account?: Account; onClose:
   const [currency, setCurrency] = useState(account?.currency ?? DEFAULT_CURRENCY);
   const [hidden, setHidden] = useState(account?.hidden ?? false);
   const [tags, setTags] = useState(account?.tags.join(', ') ?? '');
+  const [rate, setRate] = useState(account?.rate == null ? '' : String(account.rate));
   const [err, setErr] = useState('');
   const groups = [...new Set(data.accounts.map(a => a.group).filter(Boolean))].sort((x, y) => x.localeCompare(y));
   const busy = update.isPending || add.isPending;
@@ -33,12 +34,15 @@ export function AccountModal({ account, onClose }: { account?: Account; onClose:
     if (data.accounts.some(a => a.id !== account?.id && a.name.toLowerCase() === n.toLowerCase())) return setErr('Another account already has that name.');
     const cents = opening.trim() ? parseMoney(opening) : 0;
     if (!Number.isFinite(cents)) return setErr('Opening balance must be a number.');
+    const r = rate.trim().replace(/%$/, '').trim();
+    const rateNum = r ? Number(r) : null;
+    if (rateNum !== null && !Number.isFinite(rateNum)) return setErr('Rate must be a number, like 2.75.');
     try {
       if (account) {
-        await update.mutateAsync({ id: account.id, name: n, type, group: group.trim(), opening: cents, hidden, tags: tagList(tags) });
+        await update.mutateAsync({ id: account.id, name: n, type, group: group.trim(), opening: cents, hidden, tags: tagList(tags), rate: rateNum });
         toast(`Saved “${n}”`);
       } else {
-        await add.mutateAsync({ name: n, type, group: group.trim(), opening: cents, currency, tags: tagList(tags) });
+        await add.mutateAsync({ name: n, type, group: group.trim(), opening: cents, currency, tags: tagList(tags), rate: rateNum });
         toast(`Added “${n}”`);
       }
       onClose();
@@ -78,6 +82,13 @@ export function AccountModal({ account, onClose }: { account?: Account; onClose:
                 <input value={opening} onChange={e => setOpening(e.target.value)} placeholder="0.00" inputMode="decimal" />
               </div>
             </label>
+            <label className="field">Rate per year
+              <div className="amount-box">
+                <input value={rate} onChange={e => setRate(e.target.value)} placeholder="None" inputMode="decimal" />
+                <span style={{ padding: '0 9px 0 0' }}>%</span>
+              </div>
+            </label>
+            <div className="field muted" style={{ alignSelf: 'end' }}>Interest it pays, or how fast its value grows. Expected income is the balance × this rate.</div>
             <label className="field full">Tags
               <input className="input" value={tags} onChange={e => setTags(e.target.value)} placeholder="Comma separated, e.g. 5% p.a., joint" />
             </label>
