@@ -161,7 +161,9 @@ export function DataTable<T>(p: DataTableProps<T>) {
     enabled: virtual,
   });
   const items = virtual ? virt.getVirtualItems() : null;
-  const shown = items ? items.map(i => rows[i.index]).filter(Boolean) : rows;
+  // Before the first measure (scrollEl not found yet) a long table draws only its first rows: drawing
+  // thousands just to throw them away a moment later froze the page for seconds.
+  const shown = items ? items.map(i => rows[i.index]).filter(Boolean) : rows.length > VIRTUAL_MIN ? rows.slice(0, VIRTUAL_MIN) : rows;
   const padTop = items?.length ? items[0].start - margin : 0;
   const padBottom = items?.length ? virt.getTotalSize() - (items[items.length - 1].end - margin) : 0;
 
