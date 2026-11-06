@@ -82,9 +82,30 @@ export interface TxnPayload {
   splits: { category_id: number; memo: string; amount_cents: number }[];
 }
 
+/** The save payload that recreates `t` as it is now; without `keepId` it comes back as a new transaction. */
+export const txnPayload = (t: Txn, keepId: boolean): TxnPayload => ({
+  id: keepId ? t.id : null,
+  date: t.date,
+  account_id: t.acc,
+  transfer_account_id: t.xfer || null,
+  amount_cents: t.amount,
+  transfer_amount_cents: t.xamt,
+  payment: t.pay,
+  info: t.info,
+  payee_id: t.payee || null,
+  category_id: t.splits ? null : t.cat || null,
+  memo: t.memo,
+  tags: t.tags,
+  splits: (t.splits ?? []).map(s => ({ category_id: s.cat, memo: s.memo, amount_cents: s.amount })),
+});
+
 export const api = {
   saveTxn: async (p: TxnPayload) => check(await supabase.rpc('save_transaction', { p })).data as number,
   deleteTxn: async (id: number) => void check(await supabase.from('transactions').delete().eq('id', id)),
+  /** Put transactions back as they were: edited ones in place, deleted ones (`keepId` false) as new rows. For Undo. */
+  restoreTxns: async ({ txns, keepId }: { txns: Txn[]; keepId: boolean }) => {
+    for (const t of txns) check(await supabase.rpc('save_transaction', { p: txnPayload(t, keepId) }));
+  },
   /** Bulk edits. Split lines are deleted with their transaction. */
   deleteTxns: async (ids: number[]) => void check(await supabase.from('transactions').delete().in('id', ids)),
   updateTxns: async ({ ids, patch }: { ids: number[]; patch: { category_id?: number; payee_id?: number | null; payment?: string } }) =>

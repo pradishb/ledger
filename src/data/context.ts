@@ -20,7 +20,8 @@ export interface LedgerCtx {
   /** Let the current page take over the N shortcut (null gives it back to New transaction). */
   setNewShortcut: (fn: (() => void) | null) => void;
   openEdit: (t: Txn) => void;
-  toast: (msg: string) => void;
+  /** Show a short message; with `undo`, it gets an Undo button that runs it and refreshes the data. */
+  toast: (msg: string, undo?: () => Promise<unknown>) => void;
   signOut: () => void;
   /** Signed-in user's email; empty when offline with an expired session. */
   email: string;

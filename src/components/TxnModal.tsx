@@ -144,9 +144,12 @@ export function TxnModal({ initial, onClose }: { initial: Draft; onClose: () => 
   async function save(keep: boolean) {
     const p = toPayload(d, idx);
     if (typeof p === 'string') return setErr(p);
+    // What it was before, so Undo can put it back (or, for a new one, delete it).
+    const before = d.id ? data.txns.find(t => t.id === d.id) : undefined;
     try {
-      await saveM.mutateAsync(p);
-      toast(d.id ? 'Transaction updated' : 'Transaction added');
+      const id = await saveM.mutateAsync(p);
+      toast(d.id ? 'Transaction updated' : 'Transaction added',
+        before ? () => api.restoreTxns({ txns: [before], keepId: true }) : id ? () => api.deleteTxn(id) : undefined);
       if (keep) setDraft(blankDraft(accounts, today, { type: d.type, date: d.date, acc: d.acc, pay: d.pay }));
       else onClose();
     } catch (e) {
@@ -156,9 +159,10 @@ export function TxnModal({ initial, onClose }: { initial: Draft; onClose: () => 
 
   async function del() {
     if (!confirm('Delete this transaction?')) return;
+    const before = data.txns.find(t => t.id === d.id);
     try {
       await delM.mutateAsync(d.id);
-      toast('Transaction deleted');
+      toast('Transaction deleted', before && (() => api.restoreTxns({ txns: [before], keepId: false })));
       onClose();
     } catch (e) {
       setErr(errorMessage(e));

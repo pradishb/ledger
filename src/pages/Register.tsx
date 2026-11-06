@@ -150,41 +150,42 @@ export function Register() {
   // Category and payee don't apply to transfers, and a split's categories live on its lines.
   const plain = sel.filter(t => !t.xfer && !t.splits);
   const noPayee = sel.filter(t => !t.xfer);
-  const done = (n: number, what: string, skipped = 0, why = '') => {
-    toast(`${what} ${n} transaction${n === 1 ? '' : 's'}${skipped ? `; skipped ${skipped} (${why})` : ''}`);
+  /** Run a bulk change on `changed`, then confirm it with an Undo that puts those transactions back as they were. */
+  async function act(fn: () => Promise<unknown>, changed: Txn[], what: string, deleted = false, skipped = 0, why = '') {
+    try { await fn(); } catch (e) { return toast(errorMessage(e)); }
+    const n = changed.length;
+    toast(`${what} ${n} transaction${n === 1 ? '' : 's'}${skipped ? `; skipped ${skipped} (${why})` : ''}`,
+      () => api.restoreTxns({ txns: changed, keepId: !deleted }));
     clearPick();
-  };
-  async function act(fn: () => Promise<unknown>, after: () => void) {
-    try { await fn(); after(); } catch (e) { toast(errorMessage(e)); }
   }
   const setCategory = (cat: number) => plain.length
-    ? act(() => upd.mutateAsync({ ids: plain.map(t => t.id), patch: { category_id: cat } }), () => done(plain.length, 'Updated', sel.length - plain.length, 'transfers or splits'))
+    ? act(() => upd.mutateAsync({ ids: plain.map(t => t.id), patch: { category_id: cat } }), plain, 'Updated', false, sel.length - plain.length, 'transfers or splits')
     : toast('Category can only be set on transactions that aren\'t transfers or splits');
   const setPayee = (p: number) => noPayee.length
-    ? act(() => upd.mutateAsync({ ids: noPayee.map(t => t.id), patch: { payee_id: p || null } }), () => done(noPayee.length, 'Updated', sel.length - noPayee.length, 'transfers'))
+    ? act(() => upd.mutateAsync({ ids: noPayee.map(t => t.id), patch: { payee_id: p || null } }), noPayee, 'Updated', false, sel.length - noPayee.length, 'transfers')
     : toast('Transfers have no payee');
   const setPayment = (p: string) =>
-    act(() => upd.mutateAsync({ ids: sel.map(t => t.id), patch: { payment: p } }), () => done(sel.length, 'Updated'));
+    act(() => upd.mutateAsync({ ids: sel.map(t => t.id), patch: { payment: p } }), sel, 'Updated');
   function changeTags(add: boolean) {
     const raw = prompt(add ? 'Tag to add to the selected transactions:' : 'Tag to remove from the selected transactions:');
     const tag = raw?.trim().replace(/^#/, '');
     if (!tag) return;
     const byTags = new Map<string, { ids: number[]; tags: string[] }>();
-    let n = 0;
+    const changed: Txn[] = [];
     for (const t of sel) {
       const has = t.tags.includes(tag);
       if (add === has) continue;
       const tags = add ? [...t.tags, tag] : t.tags.filter(x => x !== tag);
       const k = JSON.stringify(tags);
       const g = byTags.get(k) ?? { ids: [], tags };
-      g.ids.push(t.id); byTags.set(k, g); n++;
+      g.ids.push(t.id); byTags.set(k, g); changed.push(t);
     }
-    if (!n) return toast(add ? `All of them already have #${tag}` : `None of them have #${tag}`);
-    act(() => tagM.mutateAsync([...byTags.values()]), () => done(n, add ? `Tagged #${tag} on` : `Removed #${tag} from`));
+    if (!changed.length) return toast(add ? `All of them already have #${tag}` : `None of them have #${tag}`);
+    act(() => tagM.mutateAsync([...byTags.values()]), changed, add ? `Tagged #${tag} on` : `Removed #${tag} from`);
   }
   function remove() {
-    if (!confirm(`Delete ${sel.length} transaction${sel.length === 1 ? '' : 's'}? This can't be undone.`)) return;
-    act(() => delM.mutateAsync(sel.map(t => t.id)), () => done(sel.length, 'Deleted'));
+    if (!confirm(`Delete ${sel.length} transaction${sel.length === 1 ? '' : 's'}?`)) return;
+    act(() => delM.mutateAsync(sel.map(t => t.id)), sel, 'Deleted', true);
   }
   const catOpts = (type: 'exp' | 'inc') => idx.tops.filter(c => c.type === type).flatMap(c => [
     <option key={c.id} value={c.id}>{c.name}</option>,

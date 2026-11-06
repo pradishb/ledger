@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { fetchLedger, LEDGER_KEY } from '../data/api';
 import { LedgerContext, type LedgerCtx } from '../data/context';
 import { applyTheme, initialTheme, useIsMobile, useOnline, type Theme } from '../data/hooks';
@@ -30,7 +30,20 @@ export function Layout({ onSignOut, email }: { onSignOut: () => void; email: str
   const setTheme = useCallback((t: Theme) => { applyTheme(t); setThemeState(t); }, []);
 
   const [modal, setModal] = useState<{ draft: Draft; n: number } | null>(null);
-  const toast = useCallback((msg: string) => { sonner(msg); }, []);
+  const qc = useQueryClient();
+  const toast = useCallback((msg: string, undo?: () => Promise<unknown>) => {
+    if (!undo) return void sonner(msg);
+    // Longer than a plain message, so there's time to reach the button.
+    sonner(msg, {
+      duration: 8000,
+      action: {
+        label: 'Undo',
+        onClick: () => undo().then(
+          () => { void qc.invalidateQueries({ queryKey: LEDGER_KEY }); sonner('Undone'); },
+          e => sonner(errorMessage(e))),
+      },
+    });
+  }, [qc]);
 
   const idx = useMemo(() => data && buildIndex(data, disp, rates.data), [data, disp, rates.data]);
   const bal = useMemo(() => data && balances(data, today), [data, today]);
