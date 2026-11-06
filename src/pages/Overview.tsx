@@ -79,6 +79,7 @@ export function Overview() {
       <tr className="clickable" key={a.id} onClick={() => navigate(`/transactions?account=${a.id}`)}>
         <td style={{ paddingLeft: 28 }}>
           {a.name}
+          {a.rate != null && <span className="tag" title="Rate per year">{a.rate}%</span>}
           {a.tags.map(t => <span className="tag" key={t}>{t}</span>)}
         </td>
         <td className="num" style={{ color: balColor(b) }}>{fmt(b, idx.accCur(a.id))}</td>
