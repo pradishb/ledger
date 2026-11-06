@@ -25,14 +25,14 @@ const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
 const pick = <T,>(xs: T[]) => xs[Math.floor(rnd() * xs.length)];
 
 const accounts: Account[] = [
-  { id: 1, name: 'NIC Asia Savings', type: 'bank', group: 'Liquid', opening: 120000000, sort: 0, currency: 'NPR', hidden: false },
-  { id: 2, name: 'Global IME USD', type: 'bank', group: 'Liquid', opening: 50000, sort: 1, currency: 'USD', hidden: false },
-  { id: 3, name: 'Wallet', type: 'cash', group: 'Liquid', opening: 1500000, sort: 2, currency: 'NPR', hidden: false },
-  { id: 4, name: 'Sarangkot FD 11%', type: 'asset', group: 'Investments', opening: 500000000, sort: 3, currency: 'NPR', hidden: false },
-  { id: 5, name: 'NEPSE shares', type: 'asset', group: 'Investments', opening: 860000000, sort: 4, currency: 'NPR', hidden: false },
-  { id: 6, name: 'Rajesh', type: 'asset', group: 'Receivables', opening: 7193000, sort: 5, currency: 'NPR', hidden: false },
-  { id: 7, name: 'Visa card', type: 'credit', group: '', opening: -4520000, sort: 6, currency: 'NPR', hidden: false },
-  { id: 8, name: 'Old Bag account', type: 'cash', group: 'Pre-2024', opening: 0, sort: 7, currency: 'NPR', hidden: true },
+  { id: 1, name: 'NIC Asia Savings', type: 'bank', group: 'Liquid', opening: 120000000, sort: 0, currency: 'NPR', hidden: false, growth: '4.5% p.a.' },
+  { id: 2, name: 'Global IME USD', type: 'bank', group: 'Liquid', opening: 50000, sort: 1, currency: 'USD', hidden: false, growth: '' },
+  { id: 3, name: 'Wallet', type: 'cash', group: 'Liquid', opening: 1500000, sort: 2, currency: 'NPR', hidden: false, growth: '' },
+  { id: 4, name: 'Sarangkot FD 11%', type: 'asset', group: 'Investments', opening: 500000000, sort: 3, currency: 'NPR', hidden: false, growth: '11% p.a.' },
+  { id: 5, name: 'NEPSE shares', type: 'asset', group: 'Investments', opening: 860000000, sort: 4, currency: 'NPR', hidden: false, growth: '' },
+  { id: 6, name: 'Rajesh', type: 'asset', group: 'Receivables', opening: 7193000, sort: 5, currency: 'NPR', hidden: false, growth: '' },
+  { id: 7, name: 'Visa card', type: 'credit', group: '', opening: -4520000, sort: 6, currency: 'NPR', hidden: false, growth: '' },
+  { id: 8, name: 'Old Bag account', type: 'cash', group: 'Pre-2024', opening: 0, sort: 7, currency: 'NPR', hidden: true, growth: '' },
 ];
 const PAL = ['oklch(0.56 0.09 155)', 'oklch(0.72 0.13 80)', 'oklch(0.6 0.11 245)', 'oklch(0.64 0.14 30)', 'oklch(0.58 0.13 305)'];
 const cats: Category[] = [

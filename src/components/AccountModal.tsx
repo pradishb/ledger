@@ -22,6 +22,7 @@ export function AccountModal({ account, onClose }: { account?: Account; onClose:
   const [opening, setOpening] = useState(account ? (account.opening / 100).toFixed(2) : '');
   const [currency, setCurrency] = useState(account?.currency ?? DEFAULT_CURRENCY);
   const [hidden, setHidden] = useState(account?.hidden ?? false);
+  const [growth, setGrowth] = useState(account?.growth ?? '');
   const [err, setErr] = useState('');
   const groups = [...new Set(data.accounts.map(a => a.group).filter(Boolean))].sort((x, y) => x.localeCompare(y));
   const busy = update.isPending || add.isPending;
@@ -34,10 +35,10 @@ export function AccountModal({ account, onClose }: { account?: Account; onClose:
     if (!Number.isFinite(cents)) return setErr('Opening balance must be a number.');
     try {
       if (account) {
-        await update.mutateAsync({ id: account.id, name: n, type, group: group.trim(), opening: cents, hidden });
+        await update.mutateAsync({ id: account.id, name: n, type, group: group.trim(), opening: cents, hidden, growth: growth.trim() });
         toast(`Saved “${n}”`);
       } else {
-        await add.mutateAsync({ name: n, type, group: group.trim(), opening: cents, currency });
+        await add.mutateAsync({ name: n, type, group: group.trim(), opening: cents, currency, growth: growth.trim() });
         toast(`Added “${n}”`);
       }
       onClose();
@@ -76,6 +77,9 @@ export function AccountModal({ account, onClose }: { account?: Account; onClose:
                 <span>{currencySymbol(currency)}</span>
                 <input value={opening} onChange={e => setOpening(e.target.value)} placeholder="0.00" inputMode="decimal" />
               </div>
+            </label>
+            <label className="field">Growth
+              <input className="input" value={growth} onChange={e => setGrowth(e.target.value)} placeholder="e.g. 5% p.a." maxLength={24} />
             </label>
             {isNew ? (
               <div className="field full muted">Enter amounts you owe (cards, loans) as negative. The currency can't be changed later.</div>
