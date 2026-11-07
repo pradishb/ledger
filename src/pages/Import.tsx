@@ -1,13 +1,17 @@
-// Import exports from Superwallet into one account: on-chain token transfers (Alchemy's
-// alchemy_getAssetTransfers) and card payments (Superwallet's /v2/transactions/). Paste one or more
-// responses; every entry becomes a preview row, you choose what each one is, then save.
+// Import into one account: Superwallet's on-chain token transfers (Alchemy's alchemy_getAssetTransfers) and
+// card payments (Superwallet's /v2/transactions/), pasted as JSON, and bank statements chosen as .xls/.xlsx/.csv
+// files. Every entry becomes a preview row, you choose what each one is, then save.
 import { useMemo, useState } from 'react';
 import { useLedger } from '../data/context';
 import { api, useLedgerMutation, type TxnPayload } from '../data/api';
 import { Header } from '../components/common';
 import { errorMessage, fmt } from '../lib/format';
 import { ymd } from '../lib/dates';
-import type { Index } from '../lib/ledger';
+import { amountFor, type Index } from '../lib/ledger';
+import type { Txn } from '../lib/types';
+import { UploadIcon } from 'lucide-react';
+import { Dropzone, DropzoneContent, DropzoneEmptyState } from '@/components/kibo-ui/dropzone';
+import { readStatement, type Statement, type StatementRow } from '../lib/statement';
 
 /** One entry from an export, whatever its source. */
 interface Item {
@@ -114,6 +118,101 @@ function parseItems(text: string): Item[] {
   return [...out.values()].sort((a, b) => b.time - a.time);
 }
 
+/** Spreadsheet statements, by type and extension (a browser may give an .xls no type at all). */
+const STATEMENT_TYPES = {
+  'application/vnd.ms-excel': ['.xls'],
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
+  'text/csv': ['.csv'],
+};
+
+/** Account numbers and other long digit runs at the end of a bank's detail text: "…//PA/0999524531844005". */
+const tail = (s: string) => s.replace(/\s*\/+\s*\d{8,}\s*$/, '').trim();
+
+/**
+ * Rows of a bank statement as entries. A row with the same ref, detail and direction as a bigger one is its
+ * service fee (a bill payment and its 4.00 charge); a reversal ("REV-<ref>-…") and the row it undoes start unticked.
+ */
+export function statementItems(st: Statement): Item[] {
+  const currency = st.currency || 'NPR';
+  const bySame = new Map<string, StatementRow[]>();
+  for (const r of st.rows) {
+    const k = `${r.date}|${r.ref}|${r.detail}`;
+    if (r.ref && r.debit) bySame.set(k, [...(bySame.get(k) ?? []), r]);
+  }
+  const feeOf = new Map<StatementRow, StatementRow>(), isFee = new Set<StatementRow>();
+  for (const g of bySame.values()) {
+    if (g.length !== 2) continue;
+    const [big, small] = [...g].sort((a, b) => (b.debit + b.credit) - (a.debit + a.credit));
+    if (small.debit + small.credit < big.debit + big.credit) { feeOf.set(big, small); isFee.add(small); }
+  }
+  const reversed = new Set(st.rows.map(r => r.detail.match(/^REV-([^-\s]+)-/i)?.[1]).filter(Boolean));
+  const out: Item[] = [];
+  const seen = new Map<string, number>();
+  for (const r of st.rows) {
+    if (isFee.has(r)) continue;
+    const dir = r.debit ? 'out' : 'in';
+    const amt = r.debit || r.credit, fee = feeOf.get(r);
+    const feeAmt = fee ? fee.debit || fee.credit : 0;
+    // The ref alone repeats (a dividend and its fee, interest and its tax), so the amount is part of what marks it imported.
+    let ref = `${r.ref || r.date}:${dir === 'in' ? '+' : '-'}${(amt / 100).toFixed(2)}`;
+    const n = seen.get(ref) ?? 0;
+    seen.set(ref, n + 1);
+    if (n) ref += `#${n + 1}`;
+    const detail = tail(r.detail);
+    // "Eating out,THE ARK PUB" is a QR payment: your remark, then the merchant. "ESEWA,138535719": a wallet top-up.
+    const m = detail.match(/^(.*),([^,]+)$/);
+    const label = m ? (/^\d+$/.test(m[2].trim()) ? m[1] : m[2]).trim() : detail;
+    const isRev = /^REV-/i.test(r.detail), wasRev = reversed.has(r.ref);
+    const [y, mo, d] = r.date.split('-').map(Number);
+    out.push({
+      key: ref, ref, time: new Date(y, mo - 1, d).getTime() + r.index, dir, cents: amt, currency,
+      fixedFee: feeAmt, feeNote: fee ? `service charge ${(feeAmt / 100).toFixed(2)}` : '',
+      // Same counterparty, ignoring ids that change every time (wallet transaction numbers). A "REF-…" payment
+      // says nothing about who it went to, so it's on its own.
+      group: /^REF-/i.test(detail) ? ref : detail.toLowerCase().replace(/[a-z0-9]*\d[a-z0-9]*/g, '#'),
+      label: label || detail, memo: detail, notes: isRev ? ['Reversal'] : wasRev ? ['Reversed'] : [],
+      blocked: '', offByDefault: isRev || wasRev,
+    });
+  }
+  return out;
+}
+
+/** Days since 1970 for a yyyy-mm-dd date. */
+const dayNo = (d: string) => Date.UTC(+d.slice(0, 4), +d.slice(5, 7) - 1, +d.slice(8, 10)) / 864e5;
+/** How many days apart an entry and a transaction typed in by hand can be and still be the same one. */
+const NEAR_DAYS = 3;
+
+/**
+ * Entries that look like they're already in the account, typed in by hand or imported from somewhere else
+ * (so their Info doesn't say): a transaction there with the same amount, with or without the fee, within a
+ * few days. Each transaction stands for one entry at most, the nearest date first.
+ */
+export function findEntered(list: Item[], txns: Txn[], acc: number) {
+  const byAmount = new Map<number, Txn[]>();
+  for (const t of txns) {
+    if (t.acc !== acc && t.xfer !== acc) continue;
+    const a = amountFor(t, acc);
+    byAmount.set(a, [...(byAmount.get(a) ?? []), t]);
+  }
+  const pairs: { it: Item; t: Txn; gap: number }[] = [];
+  for (const it of list) {
+    const sign = it.dir === 'in' ? 1 : -1, day = dayNo(localDate(it.time));
+    const amounts = new Set([it.cents, it.cents + (it.fixedFee ?? 0)]);
+    for (const a of amounts) for (const t of byAmount.get(sign * a) ?? []) {
+      const gap = Math.abs(dayNo(t.date) - day);
+      if (gap <= NEAR_DAYS) pairs.push({ it, t, gap });
+    }
+  }
+  pairs.sort((a, b) => a.gap - b.gap);
+  const found = new Map<string, Txn>(), used = new Set<number>();
+  for (const { it, t } of pairs) {
+    if (found.has(it.key) || used.has(t.id)) continue;
+    found.set(it.key, t);
+    used.add(t.id);
+  }
+  return found;
+}
+
 /** The address that's on every token transfer: the wallet the export is for. */
 function ownAddress(list: Item[]) {
   const tx = list.filter(i => i.from);
@@ -148,6 +247,8 @@ function whatOptions(idx: Index, accounts: { id: number; name: string }[], type:
 export function Import() {
   const { data, idx, online, toast } = useLedger();
   const [text, setText] = useState('');
+  /** Statement files chosen, by name, with what was read from each. */
+  const [files, setFiles] = useState<{ file: File; name: string; items: Item[]; account: string; error: string }[]>([]);
   const [acc, setAcc] = useState('0');
   const [me, setMe] = useState('');
   const [rows, setRows] = useState<Record<string, Row>>({});
@@ -164,7 +265,28 @@ export function Import() {
     if (!text.trim()) return { list: [] as Item[], error: '' };
     try { return { list: parseItems(text), error: '' }; } catch (e) { return { list: [], error: `Not valid JSON: ${errorMessage(e)}` }; }
   }, [text]);
-  const items = parsed.list;
+  // Statements can overlap (one month, then the week after it): each entry once.
+  const items = useMemo(() => {
+    const all = new Map<string, Item>();
+    for (const i of [...files.flatMap(f => f.items), ...parsed.list]) all.set(i.key, i);
+    return [...all.values()].sort((a, b) => b.time - a.time);
+  }, [files, parsed.list]);
+
+  /** Read the statements dropped or chosen; they replace the ones before. */
+  async function addFiles(list: File[]) {
+    if (!list.length) return;
+    const read = await Promise.all(list.map(async f => {
+      try {
+        const st = await readStatement(await f.arrayBuffer());
+        return { file: f, name: f.name, items: statementItems(st), account: st.account, error: st.rows.length ? '' : 'no transactions in it' };
+      } catch (e) {
+        return { file: f, name: f.name, items: [], account: '', error: errorMessage(e) };
+      }
+    }));
+    setFiles(read);
+    setRows({});
+    setErr('');
+  }
   const hasTransfers = items.some(i => i.from);
   const wallet = (me || ownAddress(items)).toLowerCase();
   const account = idx.accMap.get(+acc);
@@ -173,16 +295,22 @@ export function Import() {
   const others = data.accounts.filter(a => a.id !== +acc && a.currency === cur && !a.hidden);
   const imported = new Set(data.txns.map(t => t.info).filter(Boolean));
 
-  const view = items.map(i => {
+  const resolved = items.map(i => {
     // Token transfers: in or out depending on which side the wallet is, grouped by the other address.
     const it: Item = i.from
       ? { ...i, dir: i.to === wallet ? 'in' : 'out', group: i.to === wallet ? i.from : i.to!, label: i.to === wallet ? i.from : i.to! }
       : i;
     if (it.from) it.memo = it.dir === 'in' ? `From ${short(it.label)}` : `To ${short(it.label)}`;
+    return it;
+  });
+  const entered = account ? findEntered(resolved.filter(it => !imported.has(it.ref) && !it.blocked), data.txns, account.id) : new Map<string, Txn>();
+  const view = resolved.map(it => {
     const done = imported.has(it.ref);
     const off = done || !!it.blocked;
-    const r: Row = rows[it.key] ?? { include: !off && !it.offByDefault, what: '', fee: '', payee: '0', memo: it.memo, src: {} };
-    return { it, r, done, off, odd: account ? it.currency !== cur : false };
+    // A likely match is only a guess, so it starts unticked but can still be ticked.
+    const dup = entered.get(it.key);
+    const r: Row = rows[it.key] ?? { include: !off && !it.offByDefault && !dup, what: '', fee: '', payee: '0', memo: it.memo, src: {} };
+    return { it, r, done, dup, off, odd: account ? it.currency !== cur : false };
   });
 
   // Editing a row changes only that row, except that rows with the same address or merchant which are still blank,
@@ -257,10 +385,34 @@ export function Import() {
 
   return (
     <>
-      <Header title="Import" subtitle="Superwallet transfers and card payments" />
+      <Header title="Import" subtitle="Bank statements, Superwallet transfers and card payments" />
       <div className="content">
         <div className="stack" style={{ maxWidth: 1320 }}>
           <div className="panel" style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <Dropzone accept={STATEMENT_TYPES} maxFiles={10} onDrop={addFiles} onError={e => setErr(e.message)} src={files.length ? files.map(f => f.file) : undefined}>
+              <DropzoneEmptyState>
+                <div className="flex flex-col items-center justify-center">
+                  <div className="flex size-8 items-center justify-center rounded-md bg-muted text-muted-foreground">
+                    <UploadIcon size={16} />
+                  </div>
+                  <p className="my-2 w-full truncate text-wrap font-medium text-sm">Upload bank statements</p>
+                  <p className="w-full truncate text-wrap text-muted-foreground text-xs">Drag and drop or click to upload</p>
+                  <p className="text-wrap text-muted-foreground text-xs">Accepts .xls, .xlsx and .csv. Choose several and rows they share are shown once.</p>
+                </div>
+              </DropzoneEmptyState>
+              <DropzoneContent />
+            </Dropzone>
+            {err && !items.length && <div className="err">{err}</div>}
+            {files.length > 0 && (
+              <div className="muted" style={{ fontSize: 12, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                {files.map(f => (
+                  <span key={f.name}>
+                    {f.name}: {f.error ? <span className="err" style={{ margin: 0 }}>{f.error}</span> : `${f.items.length} entries${f.account ? ` · account ${f.account}` : ''}`}
+                    {' '}<button className="link" onClick={() => { setFiles(p => p.filter(x => x.name !== f.name)); setRows({}); }}>Remove</button>
+                  </span>
+                ))}
+              </div>
+            )}
             <label className="field">Paste the JSON (one response, or several one after another)
               <textarea className="input" style={{ height: 120, padding: 8, fontFamily: 'var(--mono)', fontSize: 12, resize: 'vertical' }}
                 value={text} onChange={e => { setText(e.target.value); setRows({}); setErr(''); }} placeholder='{"success":true,"data":{"records":[…]}}' />
@@ -310,7 +462,7 @@ export function Import() {
                     </tr>
                   </thead>
                   <tbody>
-                    {view.map(({ it, r, done, off, odd }) => {
+                    {view.map(({ it, r, done, dup, off, odd }) => {
                       const { base, fee } = amounts(it, r);
                       const dim = off || !r.include;
                       return (
@@ -322,6 +474,7 @@ export function Import() {
                               ? <span className="mono" title={it.label}>{it.dir === 'in' ? '← ' : '→ '}{short(it.label)}</span>
                               : <span>{it.label}</span>}
                             {done && <span className="tag">Already imported</span>}
+                            {dup && <span className="tag" title={`${dup.date} · ${fmt(Math.abs(amountFor(dup, +acc)), cur)}${dup.memo ? ` · ${dup.memo}` : ''}`}>Already in account?</span>}
                             {it.blocked && <span className="tag">{it.blocked}</span>}
                             {it.notes.map(n => <span key={n} className="tag">{n}</span>)}
                             {odd && <span className="tag" title={`Imported as ${cur} at face value`}>{it.currency}</span>}
@@ -360,6 +513,7 @@ export function Import() {
                 <span className="muted" style={{ fontSize: 12 }}>
                   {chosen.length} of {view.length} selected · in <b style={{ color: 'var(--inc)' }}>{fmt(total('in'), cur)}</b> · out <b style={{ color: 'var(--out)' }}>{fmt(total('out'), cur)}</b>
                   {count(v => v.done) > 0 && ` · ${count(v => v.done)} already imported`}
+                  {count(v => !!v.dup) > 0 && ` · ${count(v => !!v.dup)} look already in the account (unticked; hover the tag to see the match)`}
                   {count(v => !!v.it.blocked) > 0 && ` · ${count(v => !!v.it.blocked)} failed`}
                 </span>
                 <div className="spacer" />
