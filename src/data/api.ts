@@ -9,16 +9,31 @@ export const LEDGER_KEY = ['ledger'] as const;
 
 const PAGE = 1000; // PostgREST's default max rows per request
 
-async function fetchAll<T>(
-  page: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: unknown }>,
-): Promise<T[]> {
-  const out: T[] = [];
-  for (let from = 0; ; from += PAGE) {
-    const { data, error } = await page(from, from + PAGE - 1);
-    if (error) throw error;
-    out.push(...(data ?? []));
-    if (!data || data.length < PAGE) return out;
+type Page<T> = PromiseLike<{ data: T[] | null; error: unknown; count?: number | null }>;
+
+/**
+ * Every row, PAGE at a time. The first request also counts the rows, so the
+ * other pages are fetched in parallel rather than one after another.
+ */
+async function fetchAll<T>(page: (from: number, to: number, count: boolean) => Page<T>): Promise<T[]> {
+  const get = async (from: number, count = false) => {
+    const res = await page(from, from + PAGE - 1, count);
+    if (res.error) throw res.error;
+    return { rows: res.data ?? [], count: res.count ?? null };
+  };
+  const first = await get(0, true);
+  const out = [...first.rows];
+  if (first.rows.length < PAGE) return out;
+
+  const starts: number[] = [];
+  for (let from = PAGE; from < (first.count ?? 0); from += PAGE) starts.push(from);
+  for (const p of await Promise.all(starts.map(from => get(from)))) out.push(...p.rows);
+
+  // Rows added since the count (or no count at all): carry on one page at a time.
+  for (let from = PAGE * (starts.length + 1); out.length === from; from += PAGE) {
+    out.push(...(await get(from)).rows);
   }
+  return out;
 }
 
 interface AccountRow { id: number; name: string; type: AccountType; group_name: string; opening_cents: number; sort: number; currency: string; hidden: boolean; tags: string[] | null; rate: number | string | null }
@@ -32,14 +47,20 @@ interface TxnRow {
   tags: string[]; transaction_splits: SplitRow[];
 }
 
+const countIf = (count: boolean) => (count ? { count: 'exact' as const } : undefined);
+
 export async function fetchLedger(): Promise<LedgerData> {
+  // Without a session, row level security returns no rows, which would replace the cached
+  // ledger with an empty one. getSession() also waits for an expired token to be refreshed.
+  const { data: auth } = await supabase.auth.getSession();
+  if (!auth.session) throw new Error('Not signed in');
   const [accounts, cats, payees, txns] = await Promise.all([
-    fetchAll<AccountRow>((a, b) => supabase.from('accounts').select('id,name,type,group_name,opening_cents,sort,currency,hidden,tags,rate').order('sort').order('id').range(a, b)),
-    fetchAll<CategoryRow>((a, b) => supabase.from('categories').select('id,name,parent_id,type,color').order('id').range(a, b)),
-    fetchAll<PayeeRow>((a, b) => supabase.from('payees').select('id,name,match').order('id').range(a, b)),
-    fetchAll<TxnRow>((a, b) =>
+    fetchAll<AccountRow>((a, b, n) => supabase.from('accounts').select('id,name,type,group_name,opening_cents,sort,currency,hidden,tags,rate', countIf(n)).order('sort').order('id').range(a, b)),
+    fetchAll<CategoryRow>((a, b, n) => supabase.from('categories').select('id,name,parent_id,type,color', countIf(n)).order('id').range(a, b)),
+    fetchAll<PayeeRow>((a, b, n) => supabase.from('payees').select('id,name,match', countIf(n)).order('id').range(a, b)),
+    fetchAll<TxnRow>((a, b, n) =>
       supabase.from('transactions')
-        .select('id,date,account_id,transfer_account_id,amount_cents,transfer_amount_cents,payment,info,payee_id,category_id,memo,tags,transaction_splits(position,category_id,memo,amount_cents)')
+        .select('id,date,account_id,transfer_account_id,amount_cents,transfer_amount_cents,payment,info,payee_id,category_id,memo,tags,transaction_splits(position,category_id,memo,amount_cents)', countIf(n))
         .order('id').range(a, b)),
   ]);
   return {

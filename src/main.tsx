@@ -19,7 +19,9 @@ const CACHE_KEY = 'ledger.cache';
 
 const queryClient = new QueryClient({
   defaultOptions: {
-    queries: { gcTime: MONTH, staleTime: 30_000, networkMode: 'offlineFirst', retry: 1 },
+    // gcTime must not be MONTH: timers longer than ~24.8 days overflow and fire at once,
+    // which threw the restored cache away and made every open wait for a full download.
+    queries: { gcTime: Infinity, staleTime: 30_000, networkMode: 'offlineFirst', retry: 1 },
   },
 });
 
@@ -42,9 +44,11 @@ function App() {
     await supabase.auth.signOut();
   }, []);
 
-  if (loading) return null;
+  // A device that has signed in before shows its cached data while the session loads, which
+  // can mean refreshing an expired token over the network. Requests wait for that on their own.
+  if (loading && !hadSession()) return null;
   // Offline, an expired token can't be refreshed; still show the cached data.
-  if (!session && !(!online && hadSession())) return <Login />;
+  if (!loading && !session && !(!online && hadSession())) return <Login />;
 
   return <AppRoutes onSignOut={signOut} email={session?.user.email ?? ''} />;
 }
