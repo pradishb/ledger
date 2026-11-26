@@ -69,6 +69,22 @@ Install on the phone:
 
 Optional `.env` setting: `VITE_LOCALE`.
 
+## Superwallet sync
+
+`public/superwallet.user.js` is a Tampermonkey script that keeps the Superwallet card account in step with
+Superwallet. Install it from
+https://raw.githubusercontent.com/pradishb/ledger/main/public/superwallet.user.js (Tampermonkey updates it from
+there). On superwallet.xhype.io, open the Cards page, page through the payments, and press **Sync to Ledger**:
+it signs in to Ledger once, shows every change, and applies them when you press Apply.
+
+- Rows are matched by Superwallet's ids in Info, so syncing twice changes nothing. Categories, payees and memos
+  you set are kept; new payments take the category last used for the same merchant.
+- Pending payments carry the tag `pending` until they settle. A cancelled hold (VOID) keeps only its fees, and a
+  failed payment has no rows. Missing top-ups are added.
+- Superwallet's bank holds extra money while payments are pending, and that never appears in its transactions.
+  The sync keeps one row with Info `superwallet:hold` for the difference between Superwallet's balance and
+  everything else, so the account always shows Superwallet's balance. It goes once the hold is released.
+
 ## Importing from HomeBank
 
 ```sh

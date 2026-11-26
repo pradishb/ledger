@@ -419,8 +419,9 @@ export function Import() {
             </label>
             <div className="muted" style={{ fontSize: 12, display: 'flex', flexDirection: 'column', gap: 2 }}>
               <span>
-                Easiest: install the <a href="/superwallet.user.js" target="_blank" rel="noreferrer">Superwallet copy button</a> in
-                Tampermonkey. Open Superwallet's Dashboard (wallet transfers) or Cards page (card payments), page through what you want, then press <b>Copy for Ledger</b> and paste here.
+                Easiest: install the <a href="https://raw.githubusercontent.com/pradishb/ledger/main/public/superwallet.user.js" target="_blank" rel="noreferrer">Superwallet sync</a> in
+                Tampermonkey. It syncs the Superwallet card account by itself (payments, fees, top-ups and the bank hold) when you press <b>Sync to Ledger</b> on Superwallet.
+                Wallet transfers: press <b>Copy transfers</b> there and paste here.
               </span>
               <span>Or by hand: open Superwallet in the browser, open DevTools → Network, search for the request below, and copy its response.</span>
               <span>Wallet transfers: <code className="mono" style={{ userSelect: 'all' }}>https://bnb-mainnet.g.alchemy.com/v2/</code></span>
