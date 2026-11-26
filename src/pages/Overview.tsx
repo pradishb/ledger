@@ -63,9 +63,10 @@ export function Overview() {
   for (const t of data.txns) { if (t.date < first) first = t.date; if (t.date > last) last = t.date; }
   let cFrom = crFrom < first ? first : crFrom, cTo = crTo > last ? last : crTo;
   if (cFrom > cTo) [cFrom, cTo] = [crFrom, crTo];
-  const chart = buckets(cFrom, cTo, unit === 'auto' ? undefined : unit);
-  // A unit too fine for the range (say daily over ten years) falls back to auto; show that.
-  const shownUnit = unit !== 'auto' && unitFits(cFrom, cTo, unit) ? unit : 'auto';
+  // The bar size: the one picked, or the one that suits the range (also when the pick is too fine
+  // for it, say daily over ten years). Choosing a new range goes back to the one that suits it.
+  const shownUnit: Unit = unit && unitFits(cFrom, cTo, unit) ? unit : autoUnit(cFrom, cTo);
+  const chart = buckets(cFrom, cTo, shownUnit);
   const months = chart.list.map(m => {
     const fl = flows(data.txns, m.from, m.to, idx);
     return { ...m, inc: sumType(fl, 'inc', idx), exp: sumType(fl, 'exp', idx) };
@@ -192,13 +193,12 @@ export function Overview() {
 
             <Panel title="Income and expenses" action={
               <div className="panel-tools">
-                <select className="select sm" value={shownUnit} onChange={e => setUnit(e.target.value as Unit | 'auto')} title="One bar per">
-                  <option value="auto">Auto ({UNIT_NAME[autoUnit(cFrom, cTo)].toLowerCase()})</option>
+                <select className="select sm" value={shownUnit} onChange={e => setUnit(e.target.value as Unit)} title="One bar per">
                   {UNITS.map(u => (
                     <option key={u} value={u} disabled={!unitFits(cFrom, cTo, u)}>{UNIT_NAME[u]}</option>
                   ))}
                 </select>
-                <RangePicker compact alignRight value={cRange} onChange={setCRange} />
+                <RangePicker compact alignRight value={cRange} onChange={r => { setCRange(r); setUnit(null); }} />
               </div>
             }>
               <div className="legend chart-legend">
@@ -217,14 +217,14 @@ export function Overview() {
 
 const UNIT_KEY = 'ledger.unit.overview';
 
-/** The chart's bar size, remembered per device; 'auto' sizes it to the range. */
+/** The chart's bar size picked by hand, remembered per device; null follows the range. */
 function useUnit() {
-  const [u, setU] = useState<Unit | 'auto'>(() => {
-    try { const v = localStorage.getItem(UNIT_KEY); return v && (UNITS as string[]).includes(v) ? (v as Unit) : 'auto'; } catch { return 'auto'; }
+  const [u, setU] = useState<Unit | null>(() => {
+    try { const v = localStorage.getItem(UNIT_KEY); return v && (UNITS as string[]).includes(v) ? (v as Unit) : null; } catch { return null; }
   });
-  const set = (v: Unit | 'auto') => {
+  const set = (v: Unit | null) => {
     setU(v);
-    try { localStorage.setItem(UNIT_KEY, v); } catch { /* storage unavailable */ }
+    try { if (v) localStorage.setItem(UNIT_KEY, v); else localStorage.removeItem(UNIT_KEY); } catch { /* storage unavailable */ }
   };
   return [u, set] as const;
 }

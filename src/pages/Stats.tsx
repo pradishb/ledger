@@ -44,7 +44,8 @@ export function Stats() {
   for (const t of data.txns) { if (t.date < first) first = t.date; if (t.date > last) last = t.date; }
   let aFrom = from < first ? first : from, aTo = to > last ? last : to;
   if (aFrom > aTo) [aFrom, aTo] = [from, to];
-  const unit: Unit = avgPick === 'auto' ? avgUnit(aFrom, aTo) : avgPick;
+  // The one picked, or the one that suits the range; choosing a new range goes back to that.
+  const unit: Unit = avgPick ?? avgUnit(aFrom, aTo);
   const periods = periodsIn(aFrom, aTo, unit);
   const avg = (x: number) => (periods > 0 ? Math.round(x / periods) : 0);
   const fl = flows(data.txns, from, to, idx).filter(f => idx.catType(f.cat) === type)
@@ -120,10 +121,9 @@ export function Stats() {
           <div className="toolbar">
             <Seg value={by} onChange={setBy} options={[['cat', 'By category'], ['payee', 'By payee']] as const} />
             <Seg value={type} onChange={setType} options={[['exp', 'Expenses'], ['inc', 'Income']] as const} />
-            <RangePicker value={period} onChange={setPeriod} />
-            <select className="select" value={avgPick} onChange={e => setAvgPick(e.target.value as Unit | 'auto')} aria-label="Average per"
+            <RangePicker value={period} onChange={r => { setPeriod(r); setAvgPick(null); }} />
+            <select className="select" value={unit} onChange={e => setAvgPick(e.target.value as Unit)} aria-label="Average per"
               title="The average column: the amount per day, week, month… over this range">
-              <option value="auto">Average per {UNIT_NOUN[avgUnit(aFrom, aTo)]} (auto)</option>
               {UNITS.map(u => <option key={u} value={u}>Average per {UNIT_NOUN[u]}</option>)}
             </select>
             <label className="check-field" style={{ display: 'flex' }}>
@@ -174,15 +174,15 @@ export function Stats() {
 const UNIT_NOUN: Record<Unit, string> = { day: 'day', week: 'week', month: 'month', quarter: 'quarter', year: 'year' };
 const UNIT_SHORT: Record<Unit, string> = { day: 'day', week: 'wk', month: 'mo', quarter: 'qtr', year: 'yr' };
 
-/** The unit for the average column, or 'auto' to suit the range; remembered per device. */
+/** The unit for the average column picked by hand, remembered per device; null suits it to the range. */
 function useAvgUnit() {
   const key = 'ledger.stats.avg';
-  const [u, setU] = useState<Unit | 'auto'>(() => {
-    try { const v = localStorage.getItem(key) as Unit; return UNITS.includes(v) ? v : 'auto'; } catch { return 'auto'; }
+  const [u, setU] = useState<Unit | null>(() => {
+    try { const v = localStorage.getItem(key) as Unit; return UNITS.includes(v) ? v : null; } catch { return null; }
   });
-  const set = (v: Unit | 'auto') => {
+  const set = (v: Unit | null) => {
     setU(v);
-    try { localStorage.setItem(key, v); } catch { /* storage unavailable */ }
+    try { if (v) localStorage.setItem(key, v); else localStorage.removeItem(key); } catch { /* storage unavailable */ }
   };
   return [u, set] as const;
 }
