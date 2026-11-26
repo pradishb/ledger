@@ -1,9 +1,9 @@
 // ==UserScript==
 // @name         Superwallet → Ledger copy button
 // @namespace    https://ledger.pradish.com.np/
-// @version      1.0.0
+// @version      1.1.0
 // @description  When Superwallet loads your wallet transfers or card payments, shows a button that copies them for Ledger's Import page.
-// @match        *://*/*
+// @match        https://superwallet.xhype.io/*
 // @run-at       document-start
 // @grant        none
 // @downloadURL  https://ledger.pradish.com.np/superwallet.user.js
@@ -15,9 +15,7 @@
 // copy only goes to your clipboard when you press the button.
 //   Wallet transfers: Alchemy's alchemy_getAssetTransfers calls (bnb-mainnet.g.alchemy.com/v2/)
 //   Card payments:    api.superwallet.xhype.io/v2/transactions/ (every page you load)
-// It matches every site because only these request addresses identify Superwallet; on any
-// other site it never sees them and does nothing. To limit it, change @match to Superwallet's
-// own address.
+// Superwallet shows wallet transfers on /dashboard and card payments on /cards.
 (() => {
   'use strict';
   if (window.top !== window.self) return; // not inside frames
