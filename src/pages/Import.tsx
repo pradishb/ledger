@@ -418,7 +418,11 @@ export function Import() {
                 value={text} onChange={e => { setText(e.target.value); setRows({}); setErr(''); }} placeholder='{"success":true,"data":{"records":[…]}}' />
             </label>
             <div className="muted" style={{ fontSize: 12, display: 'flex', flexDirection: 'column', gap: 2 }}>
-              <span>Where to get it: open Superwallet in the browser, open DevTools → Network, search for the request below, and copy its response.</span>
+              <span>
+                Easiest: install the <a href="/superwallet.user.js" target="_blank" rel="noreferrer">Superwallet copy button</a> in
+                Tampermonkey. Open Superwallet, page through what you want, then press <b>Copy for Ledger</b> and paste here.
+              </span>
+              <span>Or by hand: open Superwallet in the browser, open DevTools → Network, search for the request below, and copy its response.</span>
               <span>Wallet transfers: <code className="mono" style={{ userSelect: 'all' }}>https://bnb-mainnet.g.alchemy.com/v2/</code></span>
               <span>Card payments: <code className="mono" style={{ userSelect: 'all' }}>https://api.superwallet.xhype.io/v2/transactions/</code> (one response per page; paste them all)</span>
             </div>

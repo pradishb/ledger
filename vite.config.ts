@@ -29,7 +29,10 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2}'],
+        // The Tampermonkey script is a download, not part of the app.
+        globIgnores: ['**/*.user.js'],
         navigateFallback: '/index.html',
+        navigateFallbackDenylist: [/\.user\.js$/],
       },
     }),
   ],
