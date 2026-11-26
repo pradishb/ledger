@@ -9,18 +9,28 @@ import { useSearchParams } from 'react-router';
 import { fmt } from '../lib/format';
 import type { Index } from '../lib/ledger';
 
-/** An amount in another currency, in the display currency at today's rate: "≈ NPR 1,069.00". Empty when there's nothing to add. */
-export function approxText(idx: Index, cents: number, cur: string) {
-  if (cur === idx.disp || !cents) return '';
+/**
+ * An amount as shown: in the display currency at today's rate, with the amount in its own currency
+ * underneath ("NPR 66,700.00" over "$500.00"). In the display currency already, or without a rate,
+ * the amount itself leads and `sub` is empty or says there's no rate.
+ */
+export function moneyText(idx: Index, cents: number, cur: string, noRate = 'No rate') {
+  if (cur === idx.disp) return { main: fmt(cents, cur), sub: '' };
   const v = idx.convert(cents, cur, idx.disp);
-  return v === null ? 'No rate' : `≈ ${fmt(v, idx.disp)}`;
+  return v === null ? { main: fmt(cents, cur), sub: noRate } : { main: fmt(v, idx.disp), sub: fmt(cents, cur) };
 }
 
-/** approxText as a small grey line under the amount. */
-export function Approx({ cents, cur, className }: { cents: number; cur: string; className?: string }) {
+/**
+ * moneyText as two lines. `reserve` gives every row room for the second line, so rows with and
+ * without one are the same height; the amount is centred in that room.
+ */
+export function Money({ cents, cur, reserve = false, noRate }: { cents: number; cur: string; reserve?: boolean; noRate?: string }) {
   const { idx } = useLedger();
-  const text = approxText(idx, cents, cur);
-  return text ? <div className={cn('text-xs font-normal text-muted-foreground', className)}>{text}</div> : null;
+  const { main, sub } = moneyText(idx, cents, cur, noRate);
+  const second = sub && <div className="text-xs font-normal text-muted-foreground">{sub}</div>;
+  if (!reserve) return <>{main}{second}</>;
+  // One line of the amount plus one text-xs line (1rem).
+  return <div className="flex flex-col justify-center" style={{ minHeight: 'calc(1lh + 1rem)' }}>{main}{second}</div>;
 }
 
 /**

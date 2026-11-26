@@ -2,7 +2,7 @@ import { useState, type CSSProperties } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { useLedger } from '../data/context';
 import { api, useLedgerMutation } from '../data/api';
-import { Bar, Chevron, Dot, Header, Panel, RangePicker, Seg, useOpenGroups, useRange } from '../components/common';
+import { Bar, Chevron, Dot, Header, Money, Panel, RangePicker, Seg, useOpenGroups, useRange } from '../components/common';
 import { ChartIE, SizedBox } from '../components/Charts';
 import { accountGroups, balColor, expectedTotal, flows, sumType, type GroupBy } from '../lib/ledger';
 import { autoUnit, buckets, longDate, rangeDates, rangeName, unitFits, UNIT_NAME, UNITS, type Unit } from '../lib/dates';
@@ -73,6 +73,8 @@ export function Overview() {
 
   // Biggest first, compared in the display currency; accounts with no rate go last.
   const dispBal = (id: number) => idx.convert(bal.get(id) ?? 0, idx.accCur(id), idx.disp) ?? -Infinity;
+  // Balances in another currency show it on a second line; then every row keeps room for one, so all rows are the same height.
+  const twoLines = data.accounts.some(a => !a.hidden && a.currency !== idx.disp);
   const groupRows = (list: typeof data.accounts) => [...list].sort((x, y) => dispBal(y.id) - dispBal(x.id) || x.sort - y.sort).map(a => {
     const b = bal.get(a.id) ?? 0;
     return (
@@ -82,7 +84,7 @@ export function Overview() {
           {a.rate != null && <span className="tag" title="Rate per year">{a.rate}%</span>}
           {a.tags.map(t => <span className="tag" key={t}>{t}</span>)}
         </td>
-        <td className="num" style={{ color: balColor(b) }}>{fmt(b, idx.accCur(a.id))}</td>
+        <td className="num" style={{ color: balColor(b) }}><Money cents={b} cur={idx.accCur(a.id)} reserve={twoLines} noRate="No rate, not in totals" /></td>
         <td />
       </tr>
     );
@@ -152,7 +154,7 @@ export function Overview() {
                       <td style={{ fontWeight: 600, color: 'var(--ink2)', fontSize: 11.5 }}>
                         <Chevron open={isOpen(g.key)} />{g.label} <span className="muted" style={{ fontWeight: 400 }}>· {g.accounts.length}</span>
                       </td>
-                      <td className="num" style={{ fontWeight: 600, color: balColor(g.balance) }}>{fmt(g.balance, idx.disp)}</td>
+                      <td className="num" style={{ fontWeight: 600, color: balColor(g.balance) }}><Money cents={g.balance} cur={idx.disp} reserve={twoLines} /></td>
                       <td className="num muted grp-pct" title={g.balance >= 0 ? 'Share of what you own' : 'Share of what you owe'}>
                         {g.balance ? `${share(g.balance)}%` : ''}
                       </td>

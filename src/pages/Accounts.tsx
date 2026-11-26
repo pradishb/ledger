@@ -4,7 +4,7 @@ import type { Column, ColumnDef, RowSelectionState, SortingState } from '@tansta
 import { Eye, EyeOff, Pencil } from 'lucide-react';
 import { useLedger } from '../data/context';
 import { api, useLedgerMutation } from '../data/api';
-import { Approx, Header, Seg, useUrlText } from '../components/common';
+import { Header, Money, Seg, useUrlText } from '../components/common';
 import { AccountModal } from '../components/AccountModal';
 import { DataTable } from '../components/data-table';
 import { Button } from '@/components/ui/button';
@@ -52,6 +52,9 @@ export function Accounts() {
     .filter(a => !prefs.type || a.type === prefs.type)
     .filter(a => !prefs.cur || a.currency === prefs.cur)
     .filter(a => !needle || a.name.toLowerCase().includes(needle) || a.group.toLowerCase().includes(needle) || a.tags.some(t => t.toLowerCase().includes(needle)));
+
+  // Accounts in another currency show it on a second line; then every row keeps room for one, so all rows are the same height.
+  const twoLines = rows.some(a => a.currency !== idx.disp);
 
   // Only rows still on screen count as selected, so a filter never edits accounts you can't see.
   const sel = rows.filter(a => selection[a.id]);
@@ -109,12 +112,7 @@ export function Accounts() {
       accessorFn: a => disp(a) ?? undefined,
       meta: { align: 'right', cellClass: 'num', cellStyle: a => ({ color: balColor(bal.get(a.id) ?? 0) }) },
       cell: ({ row: { original: a } }) => {
-        const b = bal.get(a.id) ?? 0;
-        const conv = idx.convert(b, a.currency, idx.disp);
-        return <>
-          {fmt(b, a.currency)}
-          {a.currency !== idx.disp && b !== 0 && <div className="text-xs text-muted-foreground">{conv === null ? 'No rate, not in totals' : `≈ ${fmt(conv, idx.disp)}`}</div>}
-        </>;
+        return <Money cents={bal.get(a.id) ?? 0} cur={a.currency} reserve={twoLines} noRate="No rate, not in totals" />;
       },
     },
     {
@@ -130,7 +128,7 @@ export function Accounts() {
       cell: ({ row: { original: a } }) => {
         const y = expectedYear(a, bal);
         if (y == null) return '';
-        return <span title={`${fmt(Math.round(y / 12), a.currency)} a month`}>{fmt(y, a.currency)}<Approx cents={y} cur={a.currency} /></span>;
+        return <span title={`${fmt(Math.round(y / 12), a.currency)} a month`}><Money cents={y} cur={a.currency} reserve={twoLines} /></span>;
       },
     },
     {
