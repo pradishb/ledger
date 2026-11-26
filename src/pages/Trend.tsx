@@ -239,7 +239,7 @@ export function Trend() {
 }
 
 /** Column sizes that make sense for a table (daily would be hundreds of columns). */
-const PERIODS: Unit[] = ['week', 'month', 'quarter', 'year'];
+const PERIODS: Unit[] = ['day', 'week', 'month', 'quarter', 'year'];
 const UNIT_NOUN: Record<Unit, string> = { day: 'day', week: 'week', month: 'month', quarter: 'quarter', year: 'year' };
 /** Past this many columns the table and chart get unreadable. */
 const MAX_COLS = 120;
