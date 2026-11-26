@@ -6,6 +6,22 @@ import { useState, type ReactNode } from 'react';
 import { isRange, RANGE_ROWS, rangeDates, rangeLabel, rangeName, type Range } from '../lib/dates';
 import { useLedger } from '../data/context';
 import { useSearchParams } from 'react-router';
+import { fmt } from '../lib/format';
+import type { Index } from '../lib/ledger';
+
+/** An amount in another currency, in the display currency at today's rate: "≈ NPR 1,069.00". Empty when there's nothing to add. */
+export function approxText(idx: Index, cents: number, cur: string) {
+  if (cur === idx.disp || !cents) return '';
+  const v = idx.convert(cents, cur, idx.disp);
+  return v === null ? 'No rate' : `≈ ${fmt(v, idx.disp)}`;
+}
+
+/** approxText as a small grey line under the amount. */
+export function Approx({ cents, cur, className }: { cents: number; cur: string; className?: string }) {
+  const { idx } = useLedger();
+  const text = approxText(idx, cents, cur);
+  return text ? <div className={cn('text-xs font-normal text-muted-foreground', className)}>{text}</div> : null;
+}
 
 /**
  * A segmented switch (one of a few options). Radix ToggleGroup gives it arrow-key navigation and

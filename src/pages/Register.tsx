@@ -3,7 +3,7 @@ import type { ColumnDef, RowSelectionState } from '@tanstack/react-table';
 import { useSearchParams } from 'react-router';
 import { useLedger } from '../data/context';
 import { api, useLedgerMutation } from '../data/api';
-import { Header, RangePicker, useRange, useUrlText } from '../components/common';
+import { Approx, approxText, Header, RangePicker, useRange, useUrlText } from '../components/common';
 import { AccountModal } from '../components/AccountModal';
 import { DataTable } from '../components/data-table';
 import { Button } from '@/components/ui/button';
@@ -91,8 +91,8 @@ export function Register() {
     const monoW = (n: number, pad: number, min: number) => Math.max(min, Math.ceil(n * 7.2) + pad);
     let amtLen = 0, runLen = 0;
     for (const r of rows) {
-      amtLen = Math.max(amtLen, fmt(r.amt, rowCur(r.t)).length);
-      if (A) runLen = Math.max(runLen, fmt(r.run, acur).length);
+      amtLen = Math.max(amtLen, fmt(r.amt, rowCur(r.t)).length, approxText(idx, r.amt, rowCur(r.t)).length);
+      if (A) runLen = Math.max(runLen, fmt(r.run, acur).length, approxText(idx, r.run, acur).length);
     }
     const amtW = monoW(amtLen, 30, 104);
     const lastW = A ? monoW(runLen, 30, 112) : 112;
@@ -116,10 +116,11 @@ export function Register() {
         meta: { cellClass: 'text-xs text-muted-foreground' } } satisfies ColumnDef<Row, unknown>]),
       { id: 'tags', header: 'Tags', size: 110, accessorFn: r => tagText(r.t), enableSorting: false, meta: { cellClass: 'text-xs text-muted-foreground' } },
       { id: 'amount', header: 'Amount', size: amtW, sortDescFirst: true, accessorFn: r => (A ? r.amt : idx.toDisp(r.t.acc, r.amt)),
-        meta: { align: 'right', cellClass: 'num', cellStyle: r => ({ color: r.v.amtColor }) }, cell: ({ row }) => fmt(row.original.amt, rowCur(row.original.t)) },
+        meta: { align: 'right', cellClass: 'num', cellStyle: r => ({ color: r.v.amtColor }) },
+        cell: ({ row: { original: r } }) => <>{fmt(r.amt, rowCur(r.t))}<Approx cents={r.amt} cur={rowCur(r.t)} /></> },
       ...(A ? [{ id: 'balance', header: 'Balance', size: lastW, enableSorting: false,
         meta: { align: 'right' as const, cellClass: 'num', cellStyle: (r: Row) => ({ color: balColor(r.run) }) },
-        cell: ({ row }: { row: { original: Row } }) => fmt(row.original.run, acur) } satisfies ColumnDef<Row, unknown>] : []),
+        cell: ({ row: { original: r } }: { row: { original: Row } }) => <>{fmt(r.run, acur)}<Approx cents={r.run} cur={acur} /></> } satisfies ColumnDef<Row, unknown>] : []),
     ];
     return { rows, tableRows, columns, tin, tout, rowCur };
   }, [data, idx, A, acct, acur, C, K, P, F, T, custom, range, today, needle]);
@@ -228,6 +229,7 @@ export function Register() {
   const balanceNote = b !== undefined && (
     <span className="flex items-baseline gap-1.5 text-xs text-muted-foreground">
       Balance<span className="font-mono text-[12.5px] font-medium" style={{ color: balColor(b) }}>{fmt(b, acur)}</span>
+      {approxText(idx, b, acur) && <span className="font-mono">{approxText(idx, b, acur)}</span>}
     </span>
   );
 
@@ -273,13 +275,15 @@ export function Register() {
                     <div className="mrow" key={t.id} onClick={() => openEdit(t)} style={{ opacity: t.date > today ? 0.55 : 1 }}>
                       {/* The memo leads on phones; the payee (or transfer) moves to the line below, or leads when there's no memo. */}
                       <div className="p">{t.memo || v.payee}</div>
-                      <div className="a" style={{ color: v.amtColor }}>{fmt(amt, rowCur(t))}</div>
+                      <div className="a" style={{ color: v.amtColor }}>{fmt(amt, rowCur(t))}<Approx cents={amt} cur={rowCur(t)} /></div>
                       <div className="m">
                         {fdate(t.date, today)} · <span style={{ color: v.catColor }}>{v.category}</span>
                         {t.memo && v.payee !== '—' && ` · ${v.payee}`}
                         {!A && ` · ${idx.accMap.get(t.acc)?.name ?? ''}`}
                       </div>
-                      <div className="b" style={{ color: A ? balColor(run) : 'var(--ink3)' }}>{A ? fmt(run, acur) : tagText(t)}</div>
+                      <div className="b" style={{ color: A ? balColor(run) : 'var(--ink3)' }}>
+                        {A ? <>{fmt(run, acur)}<Approx cents={run} cur={acur} /></> : tagText(t)}
+                      </div>
                     </div>
                   );
                 })}
@@ -294,8 +298,8 @@ export function Register() {
             {!rows.length && <div className="empty">No transactions match these filters.</div>}
             <div className="foot">
               <span>{rows.length} transaction{rows.length === 1 ? '' : 's'}</span>
-              <span>In <span className="mono" style={{ color: 'var(--inc)' }}>{fmt(tin, acur)}</span></span>
-              <span>Out <span className="mono" style={{ color: 'var(--out)' }}>{fmt(tout, acur)}</span></span>
+              <span>In <span className="mono" style={{ color: 'var(--inc)' }}>{fmt(tin, acur)}</span>{approxText(idx, tin, acur) && <span className="mono"> ({approxText(idx, tin, acur)})</span>}</span>
+              <span>Out <span className="mono" style={{ color: 'var(--out)' }}>{fmt(tout, acur)}</span>{approxText(idx, tout, acur) && <span className="mono"> ({approxText(idx, tout, acur)})</span>}</span>
               <div className="spacer" />
               <span>{isMobile ? 'Tap a row to edit.' : 'Click a row to edit. Tick rows (Shift for a range) to edit several.'}</span>
             </div>

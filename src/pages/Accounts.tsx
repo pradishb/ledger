@@ -4,7 +4,7 @@ import type { Column, ColumnDef, RowSelectionState, SortingState } from '@tansta
 import { Eye, EyeOff, Pencil } from 'lucide-react';
 import { useLedger } from '../data/context';
 import { api, useLedgerMutation } from '../data/api';
-import { Header, Seg, useUrlText } from '../components/common';
+import { Approx, Header, Seg, useUrlText } from '../components/common';
 import { AccountModal } from '../components/AccountModal';
 import { DataTable } from '../components/data-table';
 import { Button } from '@/components/ui/button';
@@ -130,7 +130,7 @@ export function Accounts() {
       cell: ({ row: { original: a } }) => {
         const y = expectedYear(a, bal);
         if (y == null) return '';
-        return <span title={`${fmt(Math.round(y / 12), a.currency)} a month`}>{fmt(y, a.currency)}</span>;
+        return <span title={`${fmt(Math.round(y / 12), a.currency)} a month`}>{fmt(y, a.currency)}<Approx cents={y} cur={a.currency} /></span>;
       },
     },
     {
