@@ -71,10 +71,11 @@ Optional `.env` setting: `VITE_LOCALE`.
 
 ## Superwallet sync
 
-`public/superwallet.user.js` is a Tampermonkey script that keeps the Superwallet card account in step with
-Superwallet. Install it from
+`public/superwallet.user.js` is a Tampermonkey script that keeps the Superwallet card and wallet accounts in step
+with Superwallet. Install it from
 https://raw.githubusercontent.com/pradishb/ledger/main/public/superwallet.user.js (Tampermonkey updates it from
-there). On superwallet.xhype.io, open the Cards page, page through the payments, and press **Sync to Ledger**:
+there). On superwallet.xhype.io, open the Dashboard (wallet transfers) and the Cards page, page through the
+payments, and press **Sync to Ledger**:
 it signs in to Ledger once, shows every change, and applies them when you press Apply.
 
 - Rows are matched by Superwallet's ids in Info, so syncing twice changes nothing. Categories, payees and memos
@@ -84,6 +85,10 @@ it signs in to Ledger once, shows every change, and applies them when you press 
 - Superwallet's bank holds extra money while payments are pending, and that never appears in its transactions.
   The sync keeps one row with Info `superwallet:hold` for the difference between Superwallet's balance and
   everything else, so the account always shows Superwallet's balance. It goes once the hold is released.
+- The wallet: USDT/USDC transfers are matched by transaction hash. A card top-up is a transfer to the card account
+  plus a row for Superwallet's fee (2.1%); other transfers are income or spending, with the category last used for
+  that address. Its balance is checked against what the wallet holds on BNB Chain (read from a public node); a
+  difference is reported, since it means some history isn't loaded.
 
 ## Importing from HomeBank
 

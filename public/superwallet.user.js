@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Superwallet → Ledger sync
 // @namespace    https://ledger.pradish.com.np/
-// @version      2.0.0
-// @description  Syncs your Superwallet card (payments, fees, top-ups, balance) into Ledger, with a preview before anything changes.
+// @version      2.1.0
+// @description  Syncs your Superwallet card and wallet into Ledger (payments, fees, top-ups, transfers, balances), with a preview before anything changes.
 // @match        https://superwallet.xhype.io/*
 // @run-at       document-start
 // @grant        GM_getValue
@@ -32,6 +32,11 @@
 //   in its transaction list. So the sync keeps one "bank hold" row: Superwallet's balance minus
 //   everything else. Your card balance in Ledger then always equals Superwallet's, and the row
 //   disappears once the hold is released. Old hand-made rows with an Info of "hold:…" are removed.
+// - The wallet (the "Superwallet" account): every USDT/USDC transfer the Dashboard loads is matched
+//   by its transaction hash. A top-up to the card is a transfer to the card account plus a row for
+//   Superwallet's fee; other transfers are income or spending, with the category last used for that
+//   address. The wallet's balance is checked against what it holds on BNB Chain; a difference means
+//   some history isn't loaded, so it's reported rather than papered over.
 
 (function () {
   'use strict';
@@ -40,6 +45,10 @@
   const SUPABASE_KEY = 'sb_publishable_pr20nDp1uX5ubtAF1J6Yjg_a1faSqWB';
   const HOLD_INFO = 'superwallet:hold';
   const FEE_CATEGORY = 'Banking Charges';
+  const DOLLARS = ['USDT', 'USDC', 'BUSD', 'DAI', 'FDUSD', 'TUSD', 'USDP'];
+  const BSC_RPC = 'https://bsc-dataseed.bnbchain.org';
+  // Dollar tokens on BNB Chain, checked for the wallet balance even when no transfer of them is loaded.
+  const BSC_DOLLARS = { '0x55d398326f99059ff775485246999027b3197955': 18, '0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d': 18 };
 
   // ---------------------------------------------------------------------------------------------
   // Planning: pure functions, no browser needed (they're also run by the tests in Node).
@@ -50,15 +59,25 @@
   const money = c => `${c < 0 ? '−' : ''}$${(Math.abs(c) / 100).toFixed(2)}`;
   const isFeeRow = r => /· fee \(/.test(r.memo || '');
   const merchantOf = name => String(name || '').replace(/\s*\(APPLE\)\s*$/, '').trim();
+  const short = a => `${a.slice(0, 6)}…${a.slice(-4)}`;
+  /** Token amounts in wei (18 decimals) as cents: "21000000000000000000" is 2100. */
+  const weiCents = v => { try { return Number((BigInt(v || 0) + 5000000000000000n) / 10000000000000000n); } catch { return cents(v); } };
 
   /** Superwallet's responses, sorted out by what they contain. */
   function collect(docs) {
-    const sw = { payments: new Map(), paymentsTotal: 0, deposits: new Map(), depositsTotal: 0, onchain: new Map(), balance: null };
+    const sw = { payments: new Map(), paymentsTotal: 0, deposits: new Map(), depositsTotal: 0, onchain: new Map(), balance: null, transfers: new Map(), wallet: '' };
     const walk = (v, total) => {
       if (Array.isArray(v)) return v.forEach(x => walk(x, total));
       if (!v || typeof v !== 'object') return;
       if (v.balanceInfo && v.balanceInfo.amount != null) {
         sw.balance = { cents: cents(v.balanceInfo.amount), cardNo: v.balanceInfo.cardNo || v.cardNo || '', currency: v.balanceInfo.currency || 'USD' };
+      }
+      if (Array.isArray(v.transfers)) {
+        for (const t of v.transfers) {
+          if (!t || typeof t.hash !== 'string' || typeof t.from !== 'string' || typeof t.to !== 'string' || t.value == null) continue;
+          sw.transfers.set(String(t.uniqueId || `${t.hash}:${t.from}:${t.to}:${t.value}`), { ...t, from: t.from.toLowerCase(), to: t.to.toLowerCase() });
+        }
+        return;
       }
       if (Array.isArray(v.records)) {
         const t = Number(v.total) || 0;
@@ -80,6 +99,15 @@
     // Several cards: keep the one whose balance was loaded.
     const card = sw.balance && sw.balance.cardNo;
     if (card) for (const m of [sw.payments, sw.deposits]) for (const [k, r] of m) if (r.cardNo && r.cardNo !== card) m.delete(k);
+    // The wallet's own address: the sender of a known top-up, else the one address in every transfer.
+    const hashes = new Set([...sw.onchain.values()].map(o => String(o.reportedTxHash || '').toLowerCase()));
+    const list = [...sw.transfers.values()];
+    sw.wallet = (list.find(t => hashes.has(t.hash.toLowerCase())) || {}).from || '';
+    if (!sw.wallet && list.length > 1) {
+      const n = new Map();
+      for (const t of list) for (const a of new Set([t.from, t.to])) n.set(a, (n.get(a) || 0) + 1);
+      sw.wallet = ([...n].find(([, c]) => c === list.length) || [''])[0];
+    }
     return sw;
   }
 
@@ -186,7 +214,9 @@
         continue;
       }
       if (hash && wallet) {
-        insert({ account_id: wallet, transfer_account_id: card, amount_cents: -amt, date, info: hash, memo: 'Top-up to Superwallet card' }, 'missing top-up from the wallet');
+        // Labelled like the wallet's other rows when its transfer is loaded; the wallet sync adds the fee.
+        const t = [...sw.transfers.values()].find(x => x.hash.toLowerCase() === hash.toLowerCase());
+        insert({ account_id: wallet, transfer_account_id: card, amount_cents: -amt, date, info: hash, memo: t ? `To ${short(t.to)}` : 'Top-up to Superwallet card' }, 'missing top-up from the wallet');
       } else {
         const what = /open card/i.test(d.remark || '') ? 'card opening top-up' : d.sourceOfTx === 'dashboard' ? 'top-up from the Superwallet dashboard' : 'card top-up';
         insert({ amount_cents: amt, date, info: d.orderNo, memo: `Superwallet ${what}` }, `missing ${what}`);
@@ -213,9 +243,9 @@
       else {
         touched.add(holdRows[0].id);
         const patch = {};
-        if (Number(holdRows[0].amount_cents) !== gap) patch.amount_cents = gap;
+        // Dated when the amount last changed, so a sync where nothing moved changes nothing.
+        if (Number(holdRows[0].amount_cents) !== gap) Object.assign(patch, { amount_cents: gap, date: localDate(now) });
         if (holdRows[0].memo !== memo) patch.memo = memo;
-        if (holdRows[0].date !== localDate(now)) patch.date = localDate(now);
         if (Object.keys(patch).length) ops.push({ kind: 'update', id: holdRows[0].id, patch, before: holdRows[0], why: 'hold changed' });
       }
     } else {
@@ -230,6 +260,84 @@
     const strays = rows.filter(r => r.account_id === card && !touched.has(r.id) && r.info !== HOLD_INFO && !r.transfer_account_id && !sw.payments.has(r.info));
     if (strays.length) notes.push(`${strays.length} other row${strays.length > 1 ? 's' : ''} on the card account aren't from Superwallet's lists and are left alone.`);
     return { ops, notes, warnings, balance };
+  }
+
+  /**
+   * The changes that make Ledger's wallet account match the wallet's transfers. Plan it on the rows as
+   * they'll be after the card's changes, so a top-up the card sync adds isn't added twice.
+   * chainCents: what the wallet holds on BNB Chain, in cents (null if unknown).
+   */
+  function planWallet(sw, ledger, chainCents = null, now = Date.now()) {
+    const { card, wallet } = ledger;
+    const ops = [], warnings = [], notes = [];
+    if (!wallet) return { ops, notes, warnings: ['No Superwallet wallet account in Ledger.'], balance: null, address: '' };
+    const rows = ledger.rows.map(r => ({ ...r, tags: r.tags || [] }));
+    const me = (sw.wallet || ledger.walletAddress || '').toLowerCase();
+    if (!sw.transfers.size) {
+      warnings.push('No wallet transfers loaded yet. Open the Dashboard so the wallet can be synced.');
+    } else if (!me) {
+      warnings.push("Couldn't tell which address is the wallet's. Open the Dashboard as well as the Cards page.");
+    }
+    const byInfo = new Map();
+    for (const r of rows) if (r.info) byInfo.set(r.info.toLowerCase(), [...(byInfo.get(r.info.toLowerCase()) || []), r]);
+    const feeCat = (ledger.categories.find(c => c.name === FEE_CATEGORY) || {}).id ?? null;
+    // Last category used with each address, from memos like "From 0xb80a…5fef".
+    const catOf = new Map();
+    for (const r of [...rows].sort((a, b) => a.date < b.date ? -1 : 1)) {
+      if (r.account_id === wallet && !r.transfer_account_id && !isFeeRow(r) && r.category_id) catOf.set((r.memo || '').split(/[,·]/)[0].trim(), r.category_id);
+    }
+    const onchain = new Map([...sw.onchain.values()].map(o => [String(o.reportedTxHash || '').toLowerCase(), o]));
+    const depositAddrs = new Set([...sw.transfers.values()].filter(t => onchain.has(t.hash.toLowerCase())).map(t => t.to));
+    const insert = (row, why) => ops.push({ kind: 'insert', row: { account_id: wallet, transfer_account_id: null, transfer_amount_cents: null, category_id: null, tags: [], ...row }, why });
+    const skipped = new Set();
+    if (me) for (const t of sw.transfers.values()) {
+      const asset = String(t.asset || '').toUpperCase();
+      const dir = t.to === me && t.from !== me ? 'in' : t.from === me && t.to !== me ? 'out' : null;
+      if (!dir) continue;
+      if (!DOLLARS.includes(asset)) { skipped.add(asset || 'unknown'); continue; }
+      const amt = cents(t.value);
+      if (!amt) continue;
+      const hash = t.hash.toLowerCase();
+      const date = localDate(Date.parse((t.metadata || {}).blockTimestamp) || now);
+      const mine = byInfo.get(hash) || [];
+      const net = mine.reduce((s, r) => s + effect(r, wallet), 0);
+      const o = onchain.get(hash);
+      if (dir === 'out' && o && o.cardId && card) {
+        // A card top-up: what reached the card, plus Superwallet's fee.
+        const fee = weiCents(o.businessFeeAmount);
+        const toCard = mine.find(r => r.account_id === wallet && r.transfer_account_id === card);
+        const feeRow = mine.find(r => r.account_id === wallet && isFeeRow(r));
+        if (!toCard) insert({ transfer_account_id: card, amount_cents: -(amt - fee), date, info: t.hash, memo: `To ${short(t.to)}` }, 'top-up to the card');
+        if (fee && !feeRow) {
+          const pct = Math.round(fee / (amt - fee) * 1000) / 10;
+          insert({ amount_cents: -fee, date, info: t.hash, category_id: feeCat, memo: `To ${short(t.to)} · fee (${pct}%)` }, "Superwallet's top-up fee");
+        }
+        continue;
+      }
+      const want = dir === 'in' ? amt : -amt;
+      if (mine.length) {
+        if (net !== want) warnings.push(`Transfer ${short(t.hash)} on ${date} is ${money(want)} on-chain but ${money(net)} in Ledger; left as it is.`);
+        continue;
+      }
+      if (dir === 'out' && depositAddrs.has(t.to) && !o) {
+        warnings.push(`A top-up of ${money(amt)} on ${date} isn't in the loaded deposit list, so its fee isn't known. Open the Dashboard's deposit history.`);
+        continue;
+      }
+      const memo = dir === 'in' ? `From ${short(t.from)}` : `To ${short(t.to)}`;
+      const sub = o && !o.cardId ? `${memo}, Superwallet ${o.tierId ? 'card subscription' : 'payment'}` : memo;
+      insert({ amount_cents: want, date, info: t.hash, memo: sub, category_id: o && !o.cardId ? feeCat : catOf.get(memo) || null }, dir === 'in' ? 'money in' : 'money out');
+    }
+    if (skipped.size) notes.push(`Transfers of ${[...skipped].join(', ')} aren't dollars and are left out.`);
+
+    const after = applyTo(rows, ops);
+    const ledgerCents = Number(ledger.walletOpening || 0) + after.reduce((s, r) => s + effect(r, wallet), 0);
+    const balance = chainCents == null ? null : { chain: chainCents, ledger: ledgerCents, gap: chainCents - ledgerCents };
+    if (balance && balance.gap) {
+      warnings.push(`Ledger's wallet is ${money(Math.abs(balance.gap))} ${balance.gap > 0 ? 'below' : 'above'} what the wallet holds on-chain. Some transfers may not be loaded: open the Dashboard and scroll through its history, then sync again.`);
+    } else if (chainCents == null && me) {
+      warnings.push("Couldn't read the wallet's on-chain balance, so it isn't checked.");
+    }
+    return { ops, notes, warnings, balance, address: me };
   }
 
   function mostCommon(xs) {
@@ -257,7 +365,7 @@
     return [...out.values()];
   }
 
-  const Sync = { collect, plan, effect, applyTo, localDate, money, HOLD_INFO };
+  const Sync = { collect, plan, planWallet, effect, applyTo, localDate, money, weiCents, HOLD_INFO, BSC_DOLLARS };
   if (typeof module === 'object' && module.exports) { module.exports = Sync; return; }
 
   // ---------------------------------------------------------------------------------------------
@@ -346,11 +454,37 @@
     const wallet = GM_getValue('walletAccount', null) ?? (sw.find(a => !/card/i.test(a.name)) || {}).id ?? null;
     const acc = accounts.find(a => a.id === card);
     if (!acc) throw new Error('No Superwallet card account in Ledger (an account named like "Superwallet - Card").');
+    const wacc = accounts.find(a => a.id === wallet);
+    const ids = [card, wallet].filter(Boolean);
     const [rows, categories] = await Promise.all([
-      supa(`/rest/v1/transactions?select=id,date,account_id,transfer_account_id,amount_cents,transfer_amount_cents,info,memo,category_id,tags&or=(account_id.eq.${card},transfer_account_id.eq.${card})&order=id`, { token }),
+      supa(`/rest/v1/transactions?select=id,date,account_id,transfer_account_id,amount_cents,transfer_amount_cents,info,memo,category_id,tags&or=(${ids.map(i => `account_id.eq.${i},transfer_account_id.eq.${i}`).join(',')})&order=id`, { token }),
       supa('/rest/v1/categories?select=id,name', { token }),
     ]);
-    return { card, wallet, opening: acc.opening_cents, account: acc, rows, categories };
+    return { card, wallet, opening: acc.opening_cents, account: acc, walletAccount: wacc || null, walletOpening: wacc ? wacc.opening_cents : 0,
+      walletAddress: GM_getValue('walletAddress', ''), rows, categories };
+  }
+
+  /** USDT/USDC the wallet holds on BNB Chain, in cents; null if it can't be read. */
+  async function chainBalance(address, sw) {
+    if (!address) return null;
+    const tokens = { ...BSC_DOLLARS };
+    for (const t of sw.transfers.values()) {
+      const c = t.rawContract || {};
+      if (c.address && DOLLARS.includes(String(t.asset || '').toUpperCase())) tokens[c.address.toLowerCase()] = parseInt(c.decimal || '0x12', 16) || 18;
+    }
+    try {
+      let total = 0;
+      for (const [contract, decimals] of Object.entries(tokens)) {
+        const res = await nativeFetch(BSC_RPC, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_call', params: [{ to: contract, data: '0x70a08231' + address.slice(2).padStart(64, '0') }, 'latest'] }),
+        });
+        const raw = BigInt((await res.json()).result || '0x0');
+        const unit = 10n ** BigInt(Math.max(decimals - 2, 0));
+        total += Number((raw + unit / 2n) / unit);
+      }
+      return total;
+    } catch { return null; }
   }
 
   async function apply(ops, token) {
@@ -405,6 +539,7 @@
     .sec{padding:9px 14px;background:rgba(0,0,0,.06);font-weight:500}
     .x{width:30px;height:30px;font-size:18px;color:#6b6b6b}
     .muted{color:#6b6b6b;font-size:13px}
+    h3{margin:12px 0 2px;font-size:13px;font-weight:650;text-transform:uppercase;letter-spacing:.04em;color:#6b6b6b}
     .kv{display:grid;grid-template-columns:1fr auto;gap:2px 12px;margin:6px 0 10px}
     .kv span:nth-child(even){text-align:right;font-variant-numeric:tabular-nums}
     .warn{background:#fff4e5;color:#7a4b00;border-radius:10px;padding:8px 10px;margin:6px 0;font-size:13px}
@@ -425,8 +560,9 @@
   </style>`;
 
   function counts() {
-    const sw = collect([...docs.values()]);
+    const sw = collect([...docs.values(), ...alchemy.values()]);
     const bits = [];
+    if (sw.transfers.size) bits.push(`${sw.transfers.size} wallet transfers`);
     if (sw.payments.size) bits.push(`${sw.payments.size}${sw.paymentsTotal ? '/' + sw.paymentsTotal : ''} payments`);
     if (sw.deposits.size) bits.push(`${sw.deposits.size} top-ups`);
     if (sw.balance) bits.push(money(sw.balance.cents));
@@ -446,8 +582,7 @@
 
   const views = {
     pill: () => `<div class="glass pill">
-      <button class="main" data-do="open">Sync to Ledger${docs.size ? ' · ' + esc(counts()) : ''}</button>
-      ${alchemy.size ? `<button class="sec" data-do="copy" title="Copy wallet transfers for Ledger's Import page">Copy transfers</button>` : ''}
+      <button class="main" data-do="open">Sync to Ledger${docs.size || alchemy.size ? ' · ' + esc(counts()) : ''}</button>
       <button class="x" data-do="forget" title="Forget what's loaded">×</button></div>`,
 
     signin: () => panel('Sign in to Ledger', `
@@ -460,38 +595,44 @@
     busy: () => panel('Ledger sync', `<p class="muted">${esc(state.message || 'Working…')}</p>`, ''),
 
     preview: () => {
-      const { result, ledger } = state;
+      const { result, walletResult, ledger } = state;
+      const ops = [...result.ops, ...(walletResult ? walletResult.ops : [])];
       const b = result.balance;
-      const summary = b ? `<div class="kv">
-          <span>Superwallet balance</span><span>${money(b.superwallet)}</span>
-          <span>Ledger, from transactions</span><span>${money(b.records)}</span>
-          <span>${b.gap < 0 ? 'Bank hold (pending payments)' : 'Difference'}</span><span>${money(b.gap)}</span></div>` : '';
-      // Changes to money first; rows that only gain or lose the "pending" tag are summed up in one line.
-      const tagOnly = op => op.kind === 'update' && Object.keys(op.patch).every(k => k === 'tags');
-      const pend = result.ops.filter(o => tagOnly(o) && o.patch.tags.includes('pending')).length;
-      const settled = result.ops.filter(o => tagOnly(o) && !o.patch.tags.includes('pending')).length;
-      const tagLine = [pend && `${pend} row${pend > 1 ? 's' : ''} marked pending`, settled && `${settled} row${settled > 1 ? 's' : ''} settled`].filter(Boolean).join(', ');
-      const list = result.ops.filter(op => !tagOnly(op)).map(op => {
-        const r = op.kind === 'insert' ? op.row : { ...op.before, ...op.patch };
-        const cls = op.kind === 'insert' ? 'add' : op.kind === 'delete' ? 'del' : 'upd';
-        const sign = op.kind === 'insert' ? '+' : op.kind === 'delete' ? '−' : '~';
-        const amt = SyncEffect(r, ledger.card);
-        return `<li class="${cls}"><i>${sign}</i><span>${esc(r.memo || r.info || '')}<small>${esc(r.date)} · ${esc(op.why)}</small></span><span class="amt">${money(amt)}</span></li>`;
-      }).join('');
-      return panel('Ledger sync', `
-        <p class="muted">${esc(ledger.account.name)}</p>${summary}
-        ${result.warnings.map(w => `<div class="warn">${esc(w)}</div>`).join('')}
-        ${result.ops.length ? `<ul>${list}${tagLine ? `<li class="upd"><i>~</i><span>${esc(tagLine)}<small>tag only, amounts unchanged</small></span><span></span></li>` : ''}</ul>` : '<p>Already in sync. Nothing to change.</p>'}
-        ${result.notes.map(n => `<p class="muted">${esc(n)}</p>`).join('')}
+      const card = section(ledger.account.name, ledger.card, result, b ? [
+        ['Superwallet balance', b.superwallet], ['Ledger, from transactions', b.records],
+        [b.gap < 0 ? 'Bank hold (pending payments)' : 'Difference', b.gap]] : []);
+      const wb = walletResult && walletResult.balance;
+      const wallet = walletResult ? section(ledger.walletAccount ? ledger.walletAccount.name : 'Wallet', ledger.wallet, walletResult, wb ? [
+        ['On BNB Chain', wb.chain], ['Ledger after sync', wb.ledger]] : []) : '';
+      return panel('Ledger sync', `${card}${wallet}
         ${state.error ? `<div class="err">${esc(state.error)}</div>` : ''}`,
         `<button class="sec" data-do="signout" title="Forget the Ledger session">Sign out</button><span style="flex:1"></span>
-         <button class="sec" data-do="close">${result.ops.length ? 'Cancel' : 'Close'}</button>
-         ${result.ops.length ? `<button class="main" data-do="apply">Apply ${result.ops.length} change${result.ops.length > 1 ? 's' : ''}</button>` : ''}`);
+         <button class="sec" data-do="close">${ops.length ? 'Cancel' : 'Close'}</button>
+         ${ops.length ? `<button class="main" data-do="apply">Apply ${ops.length} change${ops.length > 1 ? 's' : ''}</button>` : ''}`);
     },
 
     done: () => panel('Ledger sync', `<p>✓ ${esc(state.message)}</p>`, `<button class="main" data-do="close">Done</button>`),
   };
-  const SyncEffect = (r, card) => effect(r, card);
+  /** One account's part of the preview: its balances, warnings and changes. */
+  function section(name, account, result, balances) {
+    // Changes to money first; rows that only gain or lose the "pending" tag are summed up in one line.
+    const tagOnly = op => op.kind === 'update' && Object.keys(op.patch).every(k => k === 'tags');
+    const pend = result.ops.filter(o => tagOnly(o) && o.patch.tags.includes('pending')).length;
+    const settled = result.ops.filter(o => tagOnly(o) && !o.patch.tags.includes('pending')).length;
+    const tagLine = [pend && `${pend} row${pend > 1 ? 's' : ''} marked pending`, settled && `${settled} row${settled > 1 ? 's' : ''} settled`].filter(Boolean).join(', ');
+    const list = result.ops.filter(op => !tagOnly(op)).map(op => {
+      const r = op.kind === 'insert' ? op.row : { ...op.before, ...op.patch };
+      const cls = op.kind === 'insert' ? 'add' : op.kind === 'delete' ? 'del' : 'upd';
+      const sign = op.kind === 'insert' ? '+' : op.kind === 'delete' ? '−' : '~';
+      return `<li class="${cls}"><i>${sign}</i><span>${esc(r.memo || r.info || '')}<small>${esc(r.date)} · ${esc(op.why)}</small></span><span class="amt">${money(effect(r, account))}</span></li>`;
+    }).join('');
+    const tag = tagLine ? `<li class="upd"><i>~</i><span>${esc(tagLine)}<small>tag only, amounts unchanged</small></span><span></span></li>` : '';
+    return `<h3>${esc(name)}</h3>
+      ${balances.length ? `<div class="kv">${balances.map(([k, v]) => `<span>${esc(k)}</span><span>${money(v)}</span>`).join('')}</div>` : ''}
+      ${result.warnings.map(w => `<div class="warn">${esc(w)}</div>`).join('')}
+      ${list || tag ? `<ul>${list}${tag}</ul>` : '<p class="muted">In sync. Nothing to change.</p>'}
+      ${result.notes.map(n => `<p class="muted">${esc(n)}</p>`).join('')}`;
+  }
 
   function panel(title, body, foot) {
     return `<div class="glass panel"><div class="head"><b>${esc(title)}</b><button class="x" data-do="close">×</button></div>
@@ -506,8 +647,17 @@
       const s = await session();
       if (!s) return go('signin', { error: '' });
       const ledger = await loadLedger(s.access_token);
-      const result = plan(collect([...docs.values()]), ledger);
-      go('preview', { ledger, result, error: '' });
+      const sw = collect([...docs.values(), ...alchemy.values()]);
+      const result = plan(sw, ledger);
+      let walletResult = null;
+      if (ledger.wallet) {
+        const address = sw.wallet || ledger.walletAddress;
+        if (sw.wallet) GM_setValue('walletAddress', sw.wallet);
+        state.message = 'Reading the wallet on BNB Chain…'; render();
+        const after = applyTo(ledger.rows, result.ops).map((r, i) => (r.id == null ? { ...r, id: `planned${i}` } : r));
+        walletResult = planWallet(sw, { ...ledger, rows: after }, await chainBalance(address, sw));
+      }
+      go('preview', { ledger, result, walletResult, error: '' });
     } catch (e) { go('signin', { error: e.message }); }
   }
 
@@ -523,7 +673,8 @@
       e.target.textContent = '✓ Copied'; setTimeout(render, 1500); return;
     }
     if (what === 'apply') {
-      const { result } = state;
+      const { walletResult } = state;
+      const result = { ...state.result, ops: [...state.result.ops, ...(walletResult ? walletResult.ops : [])] };
       go('busy', { message: `Applying ${result.ops.length} changes…` });
       try {
         const s = await session();
@@ -531,7 +682,8 @@
         await apply(result.ops, s.access_token);
         const n = k => result.ops.filter(o => o.kind === k).length;
         const b = result.balance;
-        go('done', { message: `Synced: ${n('insert')} added, ${n('update')} updated, ${n('delete')} removed.${b ? ` Card balance ${money(b.superwallet)}${b.gap ? `, of which ${money(b.gap)} is the bank hold` : ''}.` : ''}` });
+        const wb = walletResult && walletResult.balance;
+        go('done', { message: `Synced: ${n('insert')} added, ${n('update')} updated, ${n('delete')} removed.${b ? ` Card balance ${money(b.superwallet)}${b.gap ? `, of which ${money(b.gap)} is the bank hold` : ''}.` : ''}${wb ? ` Wallet ${money(wb.ledger)}${wb.gap ? ` (${money(wb.chain)} on-chain)` : ', same as on-chain'}.` : ''}` });
       } catch (err) {
         // Applying stops at the first failure; syncing again picks up from where it got to.
         go('preview', { error: `${err.message}. Some changes may have been made; press Sync again to finish.` });
