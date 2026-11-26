@@ -3,7 +3,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Dialog, DialogClose, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
 import { useState, type ReactNode } from 'react';
-import { isRange, RANGE_ROWS, rangeDates, rangeLabel, rangeName, type Range } from '../lib/dates';
+import { customDates, customRange, isRange, RANGE_ROWS, rangeDates, rangeLabel, rangeName, type Range } from '../lib/dates';
 import { useLedger } from '../data/context';
 import { useSearchParams } from 'react-router';
 import { fmt } from '../lib/format';
@@ -215,15 +215,29 @@ export function RangePicker({ value, onChange, compact = false, alignRight = fal
   const [open, setOpen] = useState(false);
   const [from, to] = custom ?? rangeDates(value, today);
   const sel = custom ? undefined : value;
+  const exact = custom || customDates(value);
+  // The custom range's two dates, filled from the current range each time the list opens.
+  const known = (d: string) => (d === '0000' || d === '9999' ? '' : d);
+  const [cFrom, setCFrom] = useState('');
+  const [cTo, setCTo] = useState('');
+  const openChange = (o: boolean) => {
+    if (o) { setCFrom(known(from)); setCTo(known(to)); }
+    setOpen(o);
+  };
+  const applyCustom = () => {
+    if (!cFrom || !cTo) return;
+    onChange(customRange(cFrom, cTo));
+    setOpen(false);
+  };
 
   // Radix Popover handles outside clicks, Esc, focus and keeping the list on screen.
   return (
     <div className={`range${compact ? ' compact' : ''}`}>
-      <Popover open={open} onOpenChange={setOpen}>
+      <Popover open={open} onOpenChange={openChange}>
         <PopoverTrigger asChild>
           <button type="button" className="select range-btn" aria-haspopup="listbox"
             title={compact ? rangeLabel(from, to, today) : undefined}>
-            {custom ? rangeLabel(from, to, today) : rangeName(value)}
+            {exact ? rangeLabel(from, to, today) : rangeName(value, today)}
           </button>
         </PopoverTrigger>
         <PopoverContent align={alignRight ? 'end' : 'start'} sideOffset={4}
@@ -238,6 +252,17 @@ export function RangePicker({ value, onChange, compact = false, alignRight = fal
                 {label}
               </button>
             )))}
+          <div className="col-span-3 mx-0.5 my-1 h-px bg-border" />
+          <form className="col-span-3 flex flex-wrap items-end gap-2 px-2 pt-1 pb-1.5" onSubmit={e => { e.preventDefault(); applyCustom(); }}>
+            <span className={cn('w-full text-[12px] font-medium', exact ? 'text-primary' : 'text-muted-foreground')}>Custom range</span>
+            <label className="flex min-w-0 flex-1 flex-col gap-1 text-[11.5px] text-muted-foreground">From
+              <input type="date" className="input" value={cFrom} onChange={e => setCFrom(e.target.value)} required />
+            </label>
+            <label className="flex min-w-0 flex-1 flex-col gap-1 text-[11.5px] text-muted-foreground">To
+              <input type="date" className="input" value={cTo} onChange={e => setCTo(e.target.value)} required />
+            </label>
+            <button type="submit" className="btn-primary h-[28px] px-3" disabled={!cFrom || !cTo}>Apply</button>
+          </form>
         </PopoverContent>
       </Popover>
       {!compact && <span className="muted small">{rangeLabel(from, to, today)}</span>}

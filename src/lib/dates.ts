@@ -66,10 +66,23 @@ export const RANGE_ROWS = [
   [['l12m', 'Last 12 Months'], ['around', '30 Days Around'], ['all', 'All Dates']],
 ] as const;
 type Row = Exclude<(typeof RANGE_ROWS)[number], 'divider'>;
-export type Range = Row[number][0];
-export const RANGES: readonly (readonly [Range, string])[] = RANGE_ROWS.flatMap((r): readonly (readonly [Range, string])[] => (r === 'divider' ? [] : r));
-export const rangeName = (k: Range) => RANGES.find(r => r[0] === k)?.[1] ?? k;
-export const isRange = (k: string): k is Range => RANGES.some(r => r[0] === k);
+type Preset = Row[number][0];
+/** A preset like "tweek", or exact dates chosen in the picker: "c:2026-11-01:2026-11-20". */
+export type Range = Preset | `c:${string}:${string}`;
+export const RANGES: readonly (readonly [Preset, string])[] = RANGE_ROWS.flatMap((r): readonly (readonly [Preset, string])[] => (r === 'divider' ? [] : r));
+const CUSTOM = /^c:(\d{4}-\d{2}-\d{2}):(\d{4}-\d{2}-\d{2})$/;
+/** The exact dates of a custom range; null for a preset. */
+export const customDates = (k: string): [string, string] | null => {
+  const m = CUSTOM.exec(k);
+  return m ? [m[1], m[2]] : null;
+};
+/** A custom range from two dates, in either order. */
+export const customRange = (a: string, b: string): Range => (a <= b ? `c:${a}:${b}` : `c:${b}:${a}`);
+export const rangeName = (k: Range, today = todayStr()) => {
+  const c = customDates(k);
+  return c ? rangeLabel(c[0], c[1], today) : RANGES.find(r => r[0] === k)?.[1] ?? k;
+};
+export const isRange = (k: string): k is Range => RANGES.some(r => r[0] === k) || customDates(k) !== null;
 
 /** First day of the week for the locale: 0 = Sunday ... 6 = Saturday. Monday if unknown. */
 const WEEK_START = (() => {
@@ -84,6 +97,8 @@ const WEEK_START = (() => {
 
 /** Inclusive [from, to]. Open-ended ranges use '0000' and '9999'. */
 export function rangeDates(k: Range, today: string): [string, string] {
+  const c = customDates(k);
+  if (c) return c;
   const [y, m, d] = parts(today);
   const dow = new Date(y, m - 1, d).getDay();
   const week = (n: number): [string, string] => {
@@ -104,7 +119,7 @@ export function rangeDates(k: Range, today: string): [string, string] {
   };
   const year = (n: number): [string, string] => [ymd(y + n, 1, 1), ymd(y + n, 12, 31)];
   const days = (n: number): [string, string] => [addDays(today, -(n - 1)), today];
-  switch (k) {
+  switch (k as Preset) {
     case 'yday': return [addDays(today, -1), addDays(today, -1)];
     case 'today': return [today, today];
     case 'tmrw': return [addDays(today, 1), addDays(today, 1)];

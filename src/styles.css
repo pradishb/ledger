@@ -84,6 +84,14 @@ a { color: var(--acc); }
 .row-actions .link + .link { margin-left: 12px; }
 .input, .select { height: 28px; padding: 0 9px; border: 1px solid var(--line2); border-radius: 6px; background: var(--panel); outline: none; min-width: 0; }
 .select { padding: 0 8px; }
+/* Dropdowns look like the date range button: the app's font, the same chevron and padding, not the browser's own. */
+select.select { -webkit-appearance: none; appearance: none; font: inherit; font-weight: 500; color: var(--ink); cursor: pointer;
+  padding: 0 30px 0 9px; text-overflow: ellipsis;
+  background: var(--panel) no-repeat right 9px center / 12px url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%2369736c' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 4.5 6 7.5 9 4.5'/%3E%3C/svg%3E"); }
+select.select:hover:not(:disabled) { border-color: var(--ink3); }
+select.select:disabled { cursor: default; opacity: .6; }
+/* In forms, a dropdown's value matches the text fields beside it. */
+.field select.select, .split-line select.select, .tbl select.select { font-weight: 400; }
 .tbl .input.sm, .tbl .select.sm { height: 24px; font-size: 12px; }
 /* iOS Safari draws date inputs as bare centered text; make them look like the other fields. */
 input.input[type='date'] { -webkit-appearance: none; appearance: none; display: flex; align-items: center; text-align: left; min-height: 28px; }
@@ -274,7 +282,7 @@ input.input[type='date']::-webkit-date-and-time-value { text-align: left; margin
 .panel-head .t { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .range-btn { white-space: nowrap; }
 .range.compact .range-btn { padding-right: 26px; gap: 6px; background-position: right 7px center; }
-.panel-tools .select.sm { width: auto; padding-right: 22px; }
+.panel-tools .select.sm { width: auto; padding-right: 26px; background-position: right 7px center; }
 .panel-tools .select.sm { height: 26px; font-size: 12px; }
 /* Same 26px height as the compact range picker: 22px buttons + 1px padding + 1px border, each side. */
 .panel-tools .seg { padding: 1px; border-color: var(--line2); }
